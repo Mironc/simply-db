@@ -1,0 +1,66 @@
+[package]
+name = "simply-db"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.88"
+
+[[bin]]
+name = "server"
+path = "src/bin/server/server.rs"
+required-features = ["server-deps"]
+
+[[bin]]
+name = "client"
+path = "src/bin/client/client.rs"
+required-features = ["client-deps"]
+
+[[bench]]
+harness = false
+name = "2_expr_parsing"
+
+[[bench]]
+harness = false
+name = "1_tokenizer"
+
+[[bench]]
+harness = false
+name = "0_bench_cmp"
+
+[dependencies]
+axum = { version = "0.8", features = ["macros"], optional = true }
+chrono = { version = "0.4.45", features = ["serde"], optional = true }
+clap = { version = "4.6.1", features = ["derive"], optional = true }
+dotenv = { version = "0.15.0", optional = true }
+env_logger = { version = "0.11", features = ["color"], optional = true }
+foldhash = "0.2.0"
+iced = { version = "0.14.0", features = ["advanced"], optional = true }
+log = "0.4"
+reqwest = { version = "0.11", features = ["json"], optional = true }
+serde = { version = "1.0.219", features = ["serde_derive"], optional = true }
+serde_json = { version = "1.0.115", optional = true }
+tokio = { version = "1.0", features = ["rt-multi-thread"], optional = true }
+
+[dev-dependencies]
+boa_engine = { version = "0.21.1" }
+criterion = { version = "0.5.1", features = ["html_reports"] }
+rstest = { version = "*" }
+
+[features]
+# default = ["client-deps", "server-deps"]
+client-deps = ["env_logger", "iced", "reqwest", "serialize", "tokio"]
+serialize = ["serde", "serde_json"]
+server-deps = [
+  "axum",
+  "chrono",
+  "clap",
+  "dotenv",
+  "env_logger",
+  "serialize",
+  "tokio"
+]
+
+[profile.release]
+opt-level = 3
+strip = "symbols"
+lto = "fat"
+panic = "abort"
