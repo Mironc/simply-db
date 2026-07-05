@@ -3,7 +3,7 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 
 use axum::Json;
-use axum::extract::{Query, State};
+use axum::extract::State;
 use axum::response::IntoResponse;
 use axum::routing::post;
 use axum::{Router, routing::get};
@@ -142,7 +142,12 @@ pub async fn overview(State(state): State<DBState>) -> Result<impl IntoResponse,
 
 pub async fn health_handle() -> Json<serde_json::Value> {
     let time = chrono::Utc::now();
-    serde_json::json!({"status" : "healthy", "current_time" : time}).into()
+    serde_json::json!(
+    {
+        "status" : "healthy",
+        "current_time" : time.to_rfc3339()
+    })
+    .into()
 }
 pub async fn ping_handle() -> String {
     "pong".into()
