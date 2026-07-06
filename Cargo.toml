@@ -16,6 +16,10 @@ required-features = ["client-deps"]
 
 [[bench]]
 harness = false
+name = "3_query_parsing"
+
+[[bench]]
+harness = false
 name = "2_expr_parsing"
 
 [[bench]]
