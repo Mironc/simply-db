@@ -3,7 +3,7 @@ use simply_db::{
     common_types::SchemaValue,
     queries::insert::InsertQuery,
     sql::{
-        parser::common::{ParseError, ParseResult, TokenWalker},
+        parser::common::{ParseError, TokenWalker},
         parser::query::{parse_insert_data, parse_insert_fields, parse_insert_query, parse_query},
         parser::tokenizer::tokenize,
     },
@@ -49,7 +49,7 @@ fn insert_fields_empty() {
 }
 
 #[test]
-fn insert_data_success() -> ParseResult<()> {
+fn insert_data_success() {
     // Parsing insert data with mulptiple fields
     let tokens = tokenize("('test' , '1')");
     let mut walker = TokenWalker::new(&tokens);
@@ -57,11 +57,9 @@ fn insert_data_success() -> ParseResult<()> {
     let result = parse_insert_data(&mut walker);
     assert!(result.is_ok(), "Data parsing failed: {:?}", result.err());
 
-    let data = result?;
+    let data = result.unwrap();
     // Asserting only 2 rows were parsed successfully in this minimal simulation.
     assert_eq!(data.len(), 2);
-
-    Ok(())
 }
 
 #[test]
@@ -74,10 +72,9 @@ fn insert_row_count_mismatch() {
 
     assert_eq!(
         insert_query,
-        Err(ParseError::Other {
-            message:
-                "number of fields not matches with number of values in row. Expected:2, Provided:1"
-                    .into()
+        Err(ParseError::FieldNumberMismatch {
+            expected: 2,
+            provided: 1
         })
     );
 }

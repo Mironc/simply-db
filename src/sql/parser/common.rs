@@ -1,18 +1,30 @@
-use std::{borrow::Cow, ops::Deref};
-
 use crate::{
     common_types::{DataValue, ScalarValue},
     sql::parser::tokenizer::{Delimiter, Sign, TokenValue},
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ExpectExprErr<'a> {
+    Before { symbol: &'a str },
+    After { symbol: &'a str },
+    BeforeAfter { symbol: &'a str },
+}
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ParseError<'a> {
     UnknownInstruction,
     UnclosedBracket(char),
     UnappropriateKeyword,
+    ExpectedExpr(ExpectExprErr<'a>),
+    FieldNumberMismatch {
+        expected: usize,
+        provided: usize,
+    },
+    UnknownModifier {
+        modifier: &'a str,
+    },
     UnexpectedSymbol {
-        expected: Cow<'a, str>,
-        given: Cow<'a, str>,
+        expected: &'a str,
+        given: &'a str,
     },
     /// Unexpected end of file
     UnexpectedEof,
@@ -22,30 +34,27 @@ pub enum ParseError<'a> {
     UnknownPattern,
     WrongPattern,
     Other {
-        message: Cow<'a, str>,
+        message: &'a str,
     },
 }
-pub type ParseResult<T> = Result<T, ParseError<'static>>;
+pub type ParseResult<'a, T> = Result<T, ParseError<'a>>;
 
 #[derive(Debug, Clone)]
-pub struct TokenWalker<'a> {
-    tokens: Cow<'a, [TokenValue<'a>]>,
+pub struct TokenWalker<'a, 'b> {
+    tokens: &'b [TokenValue<'a>],
     position: usize,
 }
-impl<'a> TokenWalker<'a> {
+impl<'a, 'b> TokenWalker<'a, 'b> {
     #[inline]
-    pub fn new(tokens: &'a Vec<TokenValue<'a>>) -> Self {
+    pub fn new(tokens: &'b [TokenValue<'a>]) -> Self {
         let position = 0;
-        Self {
-            tokens: Cow::Borrowed(tokens),
-            position,
-        }
+        Self { tokens, position }
     }
     /// Clones walker without cloning tokens
     #[inline]
     pub fn clone_simple(&self) -> Self {
         Self {
-            tokens: self.tokens.clone(),
+            tokens: self.tokens,
             position: self.position,
         }
     }
@@ -53,7 +62,7 @@ impl<'a> TokenWalker<'a> {
     #[inline]
     pub fn clone_with_pos(&self, position: usize) -> Self {
         Self {
-            tokens: self.tokens.clone(),
+            tokens: self.tokens,
             position,
         }
     }
@@ -136,12 +145,12 @@ impl<'a> TokenWalker<'a> {
     ///
     /// Returns Err
     #[inline]
-    pub fn expect_next_token(&mut self, expect_token: &TokenValue) -> ParseResult<()> {
+    pub fn expect_next_token(&mut self, expect_token: &'a TokenValue) -> ParseResult<'a, ()> {
         let token = self.next_meaningful().ok_or(ParseError::UnexpectedEof)?;
         if token != expect_token {
             return Err(ParseError::UnexpectedSymbol {
-                expected: expect_token.to_string().into(),
-                given: token.to_string().into(),
+                expected: expect_token.as_str(),
+                given: token.as_str(),
             });
         }
         Ok(())
@@ -160,7 +169,7 @@ impl<'a> TokenWalker<'a> {
     }
 }
 
-pub fn parse_literal(walker: &mut TokenWalker) -> ParseResult<DataValue> {
+pub fn parse_literal<'a>(walker: &mut TokenWalker<'a, '_>) -> ParseResult<'a, DataValue> {
     let token = walker
         .peek_next_meaningful()
         .ok_or(ParseError::UnexpectedEof)?;
@@ -180,10 +189,10 @@ pub fn parse_literal(walker: &mut TokenWalker) -> ParseResult<DataValue> {
         TokenValue::SOF => Err(ParseError::UnexpectedSof),
     }
 }
-pub fn parse_bool_null_literal(walker: &mut TokenWalker) -> ParseResult<DataValue> {
+pub fn parse_bool_null_literal<'a>(walker: &mut TokenWalker<'a, '_>) -> ParseResult<'a, DataValue> {
     let token = walker.next_meaningful().ok_or(ParseError::UnexpectedEof)?;
     if let TokenValue::Keyword(k) = token {
-        Ok(match k.deref() {
+        Ok(match *k {
             "NULL" => DataValue::Null,
             "FALSE" => DataValue::Scalar(ScalarValue::Bool(false)),
             "TRUE" => DataValue::Scalar(ScalarValue::Bool(true)),
@@ -191,13 +200,13 @@ pub fn parse_bool_null_literal(walker: &mut TokenWalker) -> ParseResult<DataValu
         })
     } else {
         Err(ParseError::UnexpectedSymbol {
-            expected: "NULL, TRUE, FALSE".into(),
-            given: token.to_string().into(),
+            expected: "NULL, TRUE, FALSE",
+            given: token.as_str(),
         })
     }
 }
 /// Expects walker's pointer be beside literal symbol
-pub fn parse_string_literal(walker: &mut TokenWalker) -> ParseResult<DataValue> {
+pub fn parse_string_literal<'a>(walker: &mut TokenWalker) -> ParseResult<'a, DataValue> {
     if &TokenValue::Delimiter(Delimiter::Apostrophe)
         != walker.next_meaningful().ok_or(ParseError::UnexpectedEof)?
     {
@@ -212,13 +221,13 @@ pub fn parse_string_literal(walker: &mut TokenWalker) -> ParseResult<DataValue> 
     Ok(DataValue::Scalar(ScalarValue::Text(string)))
 }
 /// Expects walker's pointer be beside literal symbol
-pub fn parse_number_literal(walker: &mut TokenWalker) -> ParseResult<DataValue> {
+pub fn parse_number_literal<'a>(walker: &mut TokenWalker<'a, '_>) -> ParseResult<'a, DataValue> {
     let mut negative = false;
     let mut token = walker.next_meaningful().ok_or(ParseError::UnexpectedEof)?;
     if let TokenValue::Sign(Sign::Minus) = token {
         negative = true;
         token = walker.next().ok_or(ParseError::Other {
-            message: "Expected number literal after '-' sign".into(),
+            message: "Expected number literal after '-' sign",
         })?;
     }
     let whole_part = if let TokenValue::Ident(word) = token {
@@ -226,13 +235,13 @@ pub fn parse_number_literal(walker: &mut TokenWalker) -> ParseResult<DataValue> 
             Ok(n) => n,
             Err(_) => {
                 return Err(ParseError::Other {
-                    message: "Expected number literal".into(),
+                    message: "Expected number literal",
                 });
             }
         }
     } else if let TokenValue::Delimiter(Delimiter::Dot) = token {
         return Err(ParseError::Other {
-            message: "Missing whole part of a number".into(),
+            message: "Missing whole part of a number",
         });
     } else {
         return Err(ParseError::UnknownDataType);
@@ -245,8 +254,8 @@ pub fn parse_number_literal(walker: &mut TokenWalker) -> ParseResult<DataValue> 
                 Ok(n) => partial = Some(n),
                 Err(_) => {
                     return Err(ParseError::UnexpectedSymbol {
-                        expected: "number literal".into(),
-                        given: word.clone().into_owned().into(),
+                        expected: "number literal",
+                        given: *word,
                     });
                 }
             };
@@ -273,14 +282,14 @@ pub fn parse_number_literal(walker: &mut TokenWalker) -> ParseResult<DataValue> 
     }
 }
 
-pub fn parse_field(walker: &mut TokenWalker) -> ParseResult<String> {
+pub fn parse_field_name<'a>(walker: &mut TokenWalker<'a, '_>) -> ParseResult<'a, String> {
     let token = walker.next_meaningful().ok_or(ParseError::UnexpectedEof)?;
     if token.is_ident() && !token.starts_with_digit() {
         Ok(token.to_string())
     } else {
         Err(ParseError::UnexpectedSymbol {
-            expected: "valid field name that starts not with digit".into(),
-            given: token.to_string().into(),
+            expected: "valid field name that starts not with digit",
+            given: token.as_str(),
         })
     }
 }
@@ -294,6 +303,7 @@ mod test {
     fn string_literal_parsing() {
         // Test with spaces and symbols
         let tokens = tokenize("' hello *,.)(;:<>[]}{-=+!@#$%^&№@'");
+        println!("{:?}", tokens);
         let mut walker = TokenWalker::new(&tokens);
 
         let result = parse_literal(&mut walker);

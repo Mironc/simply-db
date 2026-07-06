@@ -4,14 +4,14 @@ use super::tokenizer::{Delimiter, Sign, TokenValue};
 use crate::sql::{
     expr::{ArithmeticOp, ComparisonOp, Expr, LiteralValue, LogicOp},
     parser::common::{
-        ParseError, ParseResult, TokenWalker, parse_bool_null_literal, parse_field,
-        parse_number_literal, parse_string_literal,
+        ExpectExprErr, ParseError, ParseResult, TokenWalker, parse_bool_null_literal,
+        parse_field_name, parse_number_literal, parse_string_literal,
     },
 };
 /// This is for future optimization
 pub type Prefix = HashMap<TokenValue<'static>, Vec<usize>>;
-pub type Cache = HashMap<(usize, usize), ParseError<'static>, foldhash::fast::FixedState>;
-pub type ExprParseResult<E> = Result<E, ParseError<'static>>;
+pub type Cache<'a> = HashMap<(usize, usize), ParseError<'a>, foldhash::fast::FixedState>;
+pub type ExprParseResult<'a, E> = Result<E, ParseError<'a>>;
 // impl From<&'static ParseError<'static>> for ExprParseResult<Expr> {
 //     fn from(value: &'static ParseError<'static>) -> Self {
 //         Err(Cow::Borrowed(value))
@@ -21,12 +21,19 @@ pub type ExprParseResult<E> = Result<E, ParseError<'static>>;
 ///
 /// Cleans input to exclude excessive non-meaningful tokens.
 /// Creates memoization table.
-pub fn parse_expr(walker: &mut TokenWalker, end: usize) -> ExprParseResult<Expr> {
+pub fn parse_expr<'a, 'b>(
+    walker: &mut TokenWalker<'a, '_>,
+    end: usize,
+) -> ExprParseResult<'a, Expr> {
     let mut memo = Cache::default();
     internal_parse_expr(walker, end, &mut memo)
 }
 /// From low priority to high priority
-const ORDER: [for<'a> fn(&mut TokenWalker<'a>, usize, &mut Cache) -> ParseResult<Expr>; 16] = [
+const ORDER: [for<'a> fn(
+    &mut TokenWalker<'a, '_>,
+    usize,
+    &mut Cache<'a>,
+) -> ParseResult<'a, Expr>; 16] = [
     parse_or,
     parse_and,
     parse_not,
@@ -45,11 +52,11 @@ const ORDER: [for<'a> fn(&mut TokenWalker<'a>, usize, &mut Cache) -> ParseResult
     parse_literal_or_field,
 ];
 /// Internal backtrack-recursive parsing function
-pub fn internal_parse_expr(
-    walker: &mut TokenWalker,
+pub fn internal_parse_expr<'a>(
+    walker: &mut TokenWalker<'a, '_>,
     mut end: usize,
-    memo: &mut Cache,
-) -> ExprParseResult<Expr> {
+    memo: &mut Cache<'a>,
+) -> ExprParseResult<'a, Expr> {
     let tokens = walker.tokens();
     while end != 0 {
         if tokens[end - 1] != TokenValue::Blank {
@@ -71,11 +78,11 @@ pub fn internal_parse_expr(
 /// Main function in expression parsing.
 /// Applies different patterns and if there's at least one success returns it
 pub fn try_parse_multiple<'a>(
-    walker: &mut TokenWalker<'a>,
+    walker: &mut TokenWalker<'a, '_>,
     end: usize,
-    memo: &mut Cache,
-    parse: &[impl Fn(&mut TokenWalker, usize, &mut Cache) -> ExprParseResult<Expr>],
-) -> ExprParseResult<Expr> {
+    memo: &mut Cache<'a>,
+    parse: &[impl Fn(&mut TokenWalker<'a, '_>, usize, &mut Cache<'a>) -> ExprParseResult<'a, Expr>],
+) -> ExprParseResult<'a, Expr> {
     let mut most_meaningful_err = None;
     let mut max_consumed = 0;
     for p_fn in parse.iter() {
@@ -107,10 +114,10 @@ pub fn try_parse_multiple<'a>(
 }
 ///
 pub fn parse_brackets<'a>(
-    walker: &mut TokenWalker<'a>,
+    walker: &mut TokenWalker<'a, '_>,
     end: usize,
-    memo: &mut Cache,
-) -> ExprParseResult<Expr> {
+    memo: &mut Cache<'a>,
+) -> ExprParseResult<'a, Expr> {
     if end - walker.position() < 3 {
         return Err(ParseError::WrongPattern);
     }
@@ -159,10 +166,10 @@ pub fn parse_brackets<'a>(
 }
 
 pub fn parse_not<'a>(
-    walker: &mut TokenWalker<'a>,
+    walker: &mut TokenWalker<'a, '_>,
     end: usize,
-    memo: &mut Cache,
-) -> ExprParseResult<Expr> {
+    memo: &mut Cache<'a>,
+) -> ExprParseResult<'a, Expr> {
     // Comparing with 3 because it look like this (NOT, blank, expr)
     if end - walker.position() < 3 {
         return Err(ParseError::WrongPattern);
@@ -190,10 +197,10 @@ macro_rules! parse_binary {
         ///
         /// Doc was created automatically.
         pub fn $fn_name<'a>(
-            walker: &mut TokenWalker<'a>,
+            walker: &mut TokenWalker<'a,'_>,
             end: usize,
-            memo: &mut Cache,
-        ) -> ExprParseResult<Expr> {
+            memo: &mut Cache<'a>,
+        ) -> ExprParseResult<'a, Expr> {
             let start = walker.position();
             // comparing with 3 because it looks like this (Expr, Matching Symb, Expr)
             if end - start < 3{
@@ -228,19 +235,19 @@ macro_rules! parse_binary {
                         (Err(_), Err(_)) => {
                             if current_pos > max_consumed {
                                 max_consumed = current_pos;
-                                most_meaningful_err = Some(ParseError::Other{message:format!("Expected two expressions before and after {}",$match_token).into()});
+                                most_meaningful_err = Some(ParseError::ExpectedExpr(ExpectExprErr::BeforeAfter{symbol:$match_token.as_str()}));
                             }
                         }
                         (Err(_), _) => {
                             if current_pos > max_consumed  {
                                 max_consumed = current_pos;
-                                most_meaningful_err = Some(ParseError::Other{message:format!("Expected expressions before {}",$match_token).into()});
+                                most_meaningful_err = Some(ParseError::ExpectedExpr(ExpectExprErr::Before{symbol:$match_token.as_str()}));
                             }
                         }
                         (_, Err(_)) => {
                             if current_pos > max_consumed  {
                                 max_consumed = current_pos;
-                                most_meaningful_err = Some(ParseError::Other{message:format!("Expected expressions after {}",$match_token).into()});
+                                most_meaningful_err = Some(ParseError::ExpectedExpr(ExpectExprErr::After{symbol:$match_token.as_str()}));
                             }
                         }
                     }
@@ -336,10 +343,10 @@ parse_binary!(
 
 /// I guess it's pretty self-explanatory
 pub fn parse_literal_or_field<'a>(
-    walker: &mut TokenWalker<'a>,
+    walker: &mut TokenWalker<'a, '_>,
     _: usize,
-    _: &mut Cache,
-) -> ExprParseResult<Expr> {
+    _: &mut Cache<'a>,
+) -> ExprParseResult<'a, Expr> {
     let token = walker
         .peek_next_meaningful()
         .ok_or(ParseError::UnexpectedEof)?;
@@ -359,8 +366,8 @@ pub fn parse_literal_or_field<'a>(
                     .expect("Got non-string output from parse_string_literal() function"),
             )),
             _ => Err(ParseError::UnexpectedSymbol {
-                expected: "literal or field access".into(),
-                given: token.to_string().into(),
+                expected: "literal or field access",
+                given: token.as_str(),
             }),
         },
         TokenValue::Sign(sign) => match sign {
@@ -369,8 +376,8 @@ pub fn parse_literal_or_field<'a>(
                     .expect("Got non-number output from parse_number_literal() function"),
             )),
             _ => Err(ParseError::UnexpectedSymbol {
-                expected: "literal or field access".into(),
-                given: token.to_string().into(),
+                expected: "literal or field access",
+                given: token.as_str(),
             }),
         },
         TokenValue::Keyword(_) => Ok(Expr::Literal(
@@ -378,16 +385,16 @@ pub fn parse_literal_or_field<'a>(
                 .expect("Got non-bool, non-null output from parse_bool_null_literal() function"),
         )),
         _ => Err(ParseError::UnexpectedSymbol {
-            expected: "literal or field access".into(),
-            given: token.to_string().into(),
+            expected: "literal or field access",
+            given: token.as_str(),
         }),
     }
 }
 
 #[inline]
-pub fn parse_field_access(walker: &mut TokenWalker) -> ExprParseResult<String> {
+pub fn parse_field_access<'a>(walker: &mut TokenWalker<'a, '_>) -> ExprParseResult<'a, String> {
     // Might add some logic
-    parse_field(walker)
+    parse_field_name(walker)
 }
 
 #[cfg(test)]

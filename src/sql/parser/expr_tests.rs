@@ -13,7 +13,8 @@ macro_rules! parse {
     ($input:expr) => {{
         let mut tokens = tokenize($input);
         tokens.push(TokenValue::Blank);
-        parse_expr(&mut TokenWalker::new(&tokens), tokens.len())
+        let mut walker = TokenWalker::new(&tokens);
+        parse_expr(&mut walker, tokens.len())
     }};
 }
 fn null_row() -> Row {
@@ -21,7 +22,11 @@ fn null_row() -> Row {
 }
 #[test]
 fn arithmetic() {
-    let expr = parse!("5+3");
+    let expr = {
+        let mut tokens = tokenize("5+3");
+        tokens.push(TokenValue::Blank);
+        parse_expr(&mut TokenWalker::new(&tokens), tokens.len())
+    };
 
     let expected = DataValue::Scalar(ScalarValue::Int(8));
     assert_eq!(

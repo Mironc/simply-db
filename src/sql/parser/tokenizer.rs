@@ -1,11 +1,11 @@
-use std::{borrow::Cow, collections::HashSet, fmt::Display, sync::LazyLock};
+use std::fmt::Display;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TokenValue<'a> {
-    Ident(Cow<'a, str>),
+    Ident(&'a str),
     Sign(Sign),
     Delimiter(Delimiter),
-    Keyword(Cow<'a, str>),
+    Keyword(&'a str),
     /// New line or space
     Blank,
     /// Start of the file
@@ -17,12 +17,12 @@ impl<'a> Display for TokenValue<'a> {
             f,
             "{}",
             match self {
-                TokenValue::Ident(w) => w.clone(),
-                TokenValue::Sign(sign) => sign.to_string().into(),
-                TokenValue::Delimiter(delimiter) => delimiter.to_string().into(),
-                TokenValue::Keyword(k) => k.clone(),
-                TokenValue::Blank => " ".into(),
-                TokenValue::SOF => "Sof".into(),
+                TokenValue::Ident(w) => w,
+                TokenValue::Sign(sign) => sign.as_str(),
+                TokenValue::Delimiter(delimiter) => delimiter.as_str(),
+                TokenValue::Keyword(k) => k,
+                TokenValue::Blank => " ",
+                TokenValue::SOF => "Sof",
             }
         )
     }
@@ -36,6 +36,16 @@ impl<'a> TokenValue<'a> {
                 .expect("Ident with size of 0, while calling TokenValue::starts_with_digit()")
                 .is_numeric(),
             _ => false,
+        }
+    }
+    pub fn as_str(&self) -> &'a str {
+        match *self {
+            TokenValue::Ident(w) => w,
+            TokenValue::Sign(sign) => sign.as_str(),
+            TokenValue::Delimiter(delimiter) => delimiter.as_str(),
+            TokenValue::Keyword(k) => k,
+            TokenValue::Blank => " ",
+            TokenValue::SOF => "Sof",
         }
     }
     pub fn is_ident(&self) -> bool {
@@ -66,6 +76,11 @@ macro_rules! implement_special_character {
                 match s {
                     $($symbol => Some($name::$variant),)+
                     _ => None
+                }
+            }
+            pub fn as_str(&self) -> &'static str{
+                match self {
+                    $($name::$variant => $symbol,)+
                 }
             }
         }
@@ -119,33 +134,33 @@ implement_special_character!(
     (Dollar, "$"),
     (Caret, "^"),
     (Ampersand, "&"),
+    (Number, "№"),
     //(Underscore, "_"), it's a valid ident character, so its better to skip
     (Pipe, "|")
 );
 
-/// Static hashset with keywords, I used it because it's fast
-static KEYWORDS: LazyLock<HashSet<&str>> = LazyLock::new(|| {
-    let mut hs = HashSet::new();
-    for k in KEYWORDS_LIST.into_iter() {
-        hs.insert(k);
-    }
-    hs
-});
-/// That's just a general list.
-/// Most of these keywords are unused
-const KEYWORDS_LIST: [&str; 77] = [
+macro_rules! lookup_fn {
+    ($($branch:literal),+) => {
+        #[inline(always)]
+        fn lookup_keyword(value:&str) -> bool{
+            match value{
+                $($branch => true,)+
+                _ => false
+            }
+        }
+    };
+}
+lookup_fn!(
     "SELECT",
     "FROM",
     "WHERE",
     "GROUP",
     "BY",
     "IF",
-    "HAVING",
     "ORDER",
     "DISTINCT",
     "AS",
     "LIMIT",
-    "TOP",
     "INSERT",
     "INTO",
     "VALUES",
@@ -153,26 +168,13 @@ const KEYWORDS_LIST: [&str; 77] = [
     "SET",
     "DELETE",
     "CREATE",
-    "ALTER",
     "DROP",
     "TRUNCATE",
-    "RENAME",
-    "JOIN",
-    "INNER",
-    "LEFT",
-    "RIGHT",
-    "FULL",
-    "OUTER",
-    "CROSS",
-    "ON",
     "USING",
     "AND",
     "OR",
     "NOT",
     "IN",
-    "BETWEEN",
-    "LIKE",
-    "ILIKE",
     "IS",
     "NULL",
     "EXISTS",
@@ -181,11 +183,7 @@ const KEYWORDS_LIST: [&str; 77] = [
     "THEN",
     "ELSE",
     "END",
-    "UNION",
     "ALL",
-    "INTERSECT",
-    "EXCEPT",
-    "MINUS",
     "PRIMARY",
     "KEY",
     "FOREIGN",
@@ -193,109 +191,150 @@ const KEYWORDS_LIST: [&str; 77] = [
     "UNIQUE",
     "CHECK",
     "DEFAULT",
-    "COMMIT",
-    "ROLLBACK",
-    "SAVEPOINT",
-    "START",
-    "TRANSACTION",
-    "BEGIN",
-    "GRANT",
-    "REVOKE",
     "INDEX",
     "VIEW",
     "TRIGGER",
-    "PROCEDURE",
-    "FUNCTION",
     "DATABASE",
     "TABLE",
     "COLUMN",
     "FALSE",
-    "TRUE",
-];
+    "TRUE"
+);
+
 /// Turns string into vector of tokens
 ///
 /// '''
 ///
 /// '''
-pub fn tokenize<'a>(string: &'a str) -> Vec<TokenValue<'a>> {
-    let string = string.trim();
-    let split = string.split(" ");
-    let mut tokens = vec![TokenValue::SOF];
-    let mut char_map = Vec::new();
-    for s in split {
-        for (byte_pos, _) in s.char_indices() {
-            char_map.push(byte_pos);
+// pub fn tokenize<'a>(string: &'a str) -> Vec<TokenValue<'a>> {
+//     let string = string.trim();
+//     let split = string.split(" ");
+//     let mut tokens = vec![TokenValue::SOF];
+//     let mut char_map = Vec::new();
+//     for s in split {
+//         for (byte_pos, _) in s.char_indices() {
+//             char_map.push(byte_pos);
+//         }
+//         char_map.push(s.len());
+
+//         let mut pos = 0;
+//         let mut i = 0;
+
+//         while i < (char_map.len() - 1) {
+//             let char_i = char_map[i];
+//             let char_pos = char_map[pos];
+
+//             if i + 2 < char_map.len() {
+//                 let char_i_2 = char_map[i + 2];
+//                 if let Some(sign) = Sign::from_str(&s[char_i..char_i_2]) {
+//                     if lookup_keyword(&s[char_pos..char_i]) && char_i > char_pos {
+//                         tokens.push(TokenValue::Keyword(&s[char_pos..char_i]));
+//                     } else if char_i > char_pos {
+//                         tokens.push(TokenValue::Ident(&s[char_pos..char_i]));
+//                     }
+//                     i += 2;
+//                     pos = i;
+//                     tokens.push(TokenValue::Sign(sign));
+//                     continue;
+//                 }
+//             }
+
+//             let char_i_1 = char_map[i + 1];
+//             if let Some(sign) = Sign::from_str(&s[char_i..char_i_1]) {
+//                 if lookup_keyword(&s[char_pos..char_i]) && char_i > char_pos {
+//                     tokens.push(TokenValue::Keyword(&s[char_pos..char_i]));
+//                 } else if char_i > char_pos {
+//                     tokens.push(TokenValue::Ident(&s[char_pos..char_i]));
+//                 }
+//                 i += 1;
+//                 pos = i;
+//                 tokens.push(TokenValue::Sign(sign));
+//                 continue;
+//             }
+
+//             if let Some(delim) = Delimiter::from_str(&s[char_i..char_i_1]) {
+//                 if lookup_keyword(&s[char_pos..char_i]) && char_i > char_pos {
+//                     tokens.push(TokenValue::Keyword(&s[char_pos..char_i]));
+//                 } else if char_i > char_pos {
+//                     tokens.push(TokenValue::Ident(&s[char_pos..char_i]));
+//                 }
+//                 i += 1;
+//                 pos = i;
+//                 tokens.push(TokenValue::Delimiter(delim));
+//                 continue;
+//             }
+
+//             i += 1;
+//         }
+
+//         if pos < (char_map.len() - 1) {
+//             let char_pos = char_map[pos];
+//             let char_end = char_map[char_map.len() - 1];
+
+//             if char_end > char_pos {
+//                 if lookup_keyword(&s[char_pos..char_end]) {
+//                     tokens.push(TokenValue::Keyword(&s[char_pos..char_end]));
+//                 } else {
+//                     tokens.push(TokenValue::Ident(&s[char_pos..char_end]));
+//                 }
+//             }
+//         }
+//         tokens.push(TokenValue::Blank);
+//         char_map.clear();
+//     }
+
+//     if !tokens.is_empty() {
+//         tokens.remove(tokens.len() - 1);
+//     }
+//     tokens
+// }
+//tokenize zeco copy
+pub fn tokenize(source: &str) -> Vec<TokenValue<'_>> {
+    let source = source.trim();
+    let mut char_ind = source.char_indices().peekable();
+    let mut tokens = Vec::with_capacity(50);
+    tokens.push(TokenValue::SOF);
+    while let Some(&(ind, char)) = char_ind.peek() {
+        if char.is_whitespace() {
+            tokens.push(TokenValue::Blank);
+            char_ind.next();
+            continue;
         }
-        char_map.push(s.len());
 
-        let mut pos = 0;
-        let mut i = 0;
-
-        while i < (char_map.len() - 1) {
-            let char_i = char_map[i];
-            let char_pos = char_map[pos];
-
-            if i + 2 < char_map.len() {
-                let char_i_2 = char_map[i + 2];
-                if let Some(sign) = Sign::from_str(&s[char_i..char_i_2]) {
-                    if KEYWORDS.contains(&&s[char_pos..char_i]) && char_i > char_pos {
-                        tokens.push(TokenValue::Keyword(Cow::Borrowed(&s[char_pos..char_i])));
-                    } else if char_i > char_pos {
-                        tokens.push(TokenValue::Ident(Cow::Borrowed(&s[char_pos..char_i])));
-                    }
-                    i += 2;
-                    pos = i;
-                    tokens.push(TokenValue::Sign(sign));
+        if !char.is_alphanumeric() && !char.is_whitespace() && char != '_' {
+            let start_ind = ind;
+            char_ind.next();
+            if let Some(&(end_ind, c)) = char_ind.peek() {
+                if let Some(token) = Sign::from_str(&source[start_ind..end_ind + c.len_utf8()]) {
+                    tokens.push(TokenValue::Sign(token));
+                    char_ind.next();
                     continue;
                 }
             }
-
-            let char_i_1 = char_map[i + 1];
-            if let Some(sign) = Sign::from_str(&s[char_i..char_i_1]) {
-                if KEYWORDS.contains(&&s[char_pos..char_i]) && char_i > char_pos {
-                    tokens.push(TokenValue::Keyword(Cow::Borrowed(&s[char_pos..char_i])));
-                } else if char_i > char_pos {
-                    tokens.push(TokenValue::Ident(Cow::Borrowed(&s[char_pos..char_i])));
-                }
-                i += 1;
-                pos = i;
-                tokens.push(TokenValue::Sign(sign));
+            if let Some(token) = Sign::from_str(&source[start_ind..start_ind + char.len_utf8()]) {
+                tokens.push(TokenValue::Sign(token));
                 continue;
             }
-
-            if let Some(delim) = Delimiter::from_str(&s[char_i..char_i_1]) {
-                if KEYWORDS.contains(&&s[char_pos..char_i]) && char_i > char_pos {
-                    tokens.push(TokenValue::Keyword(Cow::Borrowed(&s[char_pos..char_i])));
-                } else if char_i > char_pos {
-                    tokens.push(TokenValue::Ident(Cow::Borrowed(&s[char_pos..char_i])));
-                }
-                i += 1;
-                pos = i;
-                tokens.push(TokenValue::Delimiter(delim));
+            if let Some(token) =
+                Delimiter::from_str(&source[start_ind..start_ind + char.len_utf8()])
+            {
+                tokens.push(TokenValue::Delimiter(token));
                 continue;
             }
-
-            i += 1;
         }
-
-        if pos < (char_map.len() - 1) {
-            let char_pos = char_map[pos];
-            let char_end = char_map[char_map.len() - 1];
-
-            if char_end > char_pos {
-                if KEYWORDS.contains(&&s[char_pos..char_end]) {
-                    tokens.push(TokenValue::Keyword(Cow::Borrowed(&s[char_pos..char_end])));
-                } else {
-                    tokens.push(TokenValue::Ident(Cow::Borrowed(&s[char_pos..char_end])));
-                }
-            }
+        let start = ind;
+        let mut end = ind;
+        while let Some(&(ind, c)) = char_ind.peek()
+            && (c.is_alphanumeric() || c == '_')
+        {
+            end = ind + c.len_utf8();
+            char_ind.next();
         }
-        tokens.push(TokenValue::Blank);
-        char_map.clear();
-    }
-
-    if !tokens.is_empty() {
-        tokens.remove(tokens.len() - 1);
+        if lookup_keyword(&source[start..end]) {
+            tokens.push(TokenValue::Keyword(&source[start..end]));
+        } else {
+            tokens.push(TokenValue::Ident(&source[start..end]));
+        }
     }
     tokens
 }
