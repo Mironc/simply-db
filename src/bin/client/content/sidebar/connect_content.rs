@@ -35,7 +35,7 @@ impl ConnectContent {
     }
     pub fn view<'a>(
         &'a self,
-        global_data: &GlobalData,
+        _global_data: &GlobalData,
         is_expanded: bool,
         pane_id: pane_grid::Pane,
     ) -> Element<'a, Message> {

@@ -9,9 +9,8 @@ use axum::routing::post;
 use axum::{Router, routing::get};
 use clap::Parser;
 use serde::{Deserialize, Serialize};
-use simply_db::common_types::{DataValue, Schema};
-use simply_db::db::Database;
-use simply_db::sql::query::QueryRequest;
+use storage::common_types::{DataValue, Schema};
+use storage::db::Database;
 use tokio::net::TcpListener;
 
 use crate::command_args::CommandArgs;
@@ -73,7 +72,7 @@ async fn listen_ip() -> SocketAddr {
             )
         }
     };
-    log::info!("Listening on {}", host.to_string());
+    log::info!("Listening on {}", host);
     tokio::net::lookup_host(&host)
         .await
         .expect("Expected valid address")
@@ -110,7 +109,7 @@ pub async fn query(
 ) -> Result<impl IntoResponse, String> {
     log::info!("Got query {}", query.sql);
     let instant = std::time::Instant::now();
-    let query_req = QueryRequest::from_query_request(&query.sql.trim_matches('\"'))
+    let query_req = parser::parse_query_request(query.sql.trim_matches('\"'))
         .map_err(|e| format!("Err:{:?}", e))?;
     log::info!(
         "Took {} s to parse query \"{}\"",

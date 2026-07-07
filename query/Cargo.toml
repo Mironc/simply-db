@@ -1,0 +1,14 @@
+[package]
+name = "query"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+serde = { workspace = true, optional = true }
+storage = { path = "../storage" }
+
+[dev-dependencies]
+rstest = { workspace = true }
+
+[features]
+serialize = ["serde"]

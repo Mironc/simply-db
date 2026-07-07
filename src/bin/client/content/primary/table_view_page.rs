@@ -1,10 +1,9 @@
-use std::collections::HashMap;
 
 use iced::{
     Alignment, Length,
     widget::{self, container},
 };
-use simply_db::common_types::{DataValue, Schema};
+use storage::common_types::DataValue;
 
 use crate::{
     AsyncMessage, Message,
@@ -26,7 +25,7 @@ impl TableViewer {
                         requests::fetch_rows(url.clone(), table.clone()),
                         AsyncMessage::FetchTableResult,
                     )
-                    .map(|x| Message::AsyncMessage(x))
+                    .map(Message::AsyncMessage)
                 } else {
                     iced::Task::none()
                 }
@@ -69,6 +68,5 @@ impl TableViewer {
             .align_y(Alignment::Center)
             .padding(7)
             .style(move |_th| container_style())
-            .into()
     }
 }

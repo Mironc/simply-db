@@ -1,5 +1,5 @@
 use iced::widget::pane_grid;
-use simply_db::common_types::DataValue;
+use storage::common_types::DataValue;
 
 use crate::{
     content::{Content, primary::PrimaryPage},
@@ -85,6 +85,12 @@ pub struct AppState {
     content: Content,
     global_data: GlobalData,
 }
+impl Default for AppState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl AppState {
     pub fn new() -> Self {
         Self {
@@ -101,6 +107,6 @@ fn app_update(state: &mut AppState, message: Message) -> iced::Task<Message> {
     let task2 = state.content.update(message, &state.global_data);
     task1.chain(task2)
 }
-fn app_view<'a>(state: &AppState) -> iced::Element<'_, Message> {
+fn app_view(state: &AppState) -> iced::Element<'_, Message> {
     state.content.view(&state.global_data)
 }

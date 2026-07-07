@@ -92,7 +92,7 @@ impl SidebarContent {
     pub fn update(&mut self, message: &Message) -> iced::Task<Message> {
         let mut tasks = iced::Task::none();
         for pane in self.grid.iter_mut() {
-            tasks = tasks.chain(pane.1.update(&message));
+            tasks = tasks.chain(pane.1.update(message));
         }
         match message {
             Message::SidebarResize(resize_event) => {
@@ -122,7 +122,7 @@ impl SidebarContent {
                     if let Some(split) = self
                         .splits
                         .iter()
-                        .find(|x| &x.pane == pane_id || &x.pane == pane_id)
+                        .find(|x| &x.pane == pane_id || &x.other_pane == pane_id)
                     {
                         let is_expanded = pane_state.is_expanded;
                         let target_ratio = if is_expanded { split.ratio } else { 0.0 };

@@ -1,0 +1,34 @@
+[package]
+name = "parser"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+query = {path = "../query/"}
+storage = { path = "../storage/"}
+foldhash = "0.2.0"
+
+[dev-dependencies]
+rstest = {workspace = true}
+boa_engine = {workspace = true}
+criterion = {workspace = true}
+
+[[bench]]
+harness = false
+name = "3_query_parsing"
+required-features = ["bench"]
+
+[[bench]]
+harness = false
+name = "2_expr_parsing"
+
+[[bench]]
+harness = false
+name = "1_tokenizer"
+
+[[bench]]
+harness = false
+name = "0_bench_cmp"
+
+[features]
+serialize = []

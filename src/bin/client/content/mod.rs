@@ -11,7 +11,7 @@ use crate::{
         sidebar::SidebarContent,
         style::{container_style, container_whole_style, text_style},
     },
-    global_data::{self, GlobalData},
+    global_data::GlobalData,
 };
 pub mod header;
 pub mod primary;
@@ -32,8 +32,8 @@ impl ContentPart {
     }
     pub fn update(&mut self, message: &Message, global_data: &GlobalData) -> iced::Task<Message> {
         match self {
-            ContentPart::Sidebar(sidebar) => sidebar.update(&message),
-            ContentPart::Primary(primary) => primary.update(&message, global_data),
+            ContentPart::Sidebar(sidebar) => sidebar.update(message),
+            ContentPart::Primary(primary) => primary.update(message, global_data),
         }
     }
 }
@@ -54,7 +54,7 @@ impl Content {
                 ContentPart::Primary(PrimaryContent::new()),
             )
             .unwrap();
-        let header = Header {};
+        let header = Header::new();
         Self { grid, header }
     }
     pub fn update(&mut self, message: Message, global_data: &GlobalData) -> iced::Task<Message> {

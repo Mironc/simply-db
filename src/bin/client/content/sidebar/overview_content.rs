@@ -7,7 +7,7 @@ use crate::{
     AsyncMessage, Message,
     content::style::{MIN_SECTION_SIZE, button_style, text_style},
     global_data::GlobalData,
-    requests::{self, Overview},
+    requests::{self},
 };
 
 #[derive(Debug, Clone, Default)]
@@ -23,7 +23,7 @@ impl OverviewContent {
                 requests::fetch_overview(url.clone()),
                 AsyncMessage::OverviewResult,
             )
-            .map(|r| Message::AsyncMessage(r)),
+            .map(Message::AsyncMessage),
             _ => iced::Task::none(),
         }
     }

@@ -6,7 +6,7 @@ use iced::{
 use crate::{
     AsyncMessage, Message,
     content::style::{container_style, text_input_style},
-    global_data::{self, GlobalData},
+    global_data::GlobalData,
     requests::send_query,
 };
 
@@ -25,7 +25,7 @@ impl QueryPage {
                         send_query(url.clone(), query.clone()),
                         AsyncMessage::QueryResult,
                     )
-                    .map(|x| Message::AsyncMessage(x));
+                    .map(Message::AsyncMessage);
                     return task;
                 }
             }

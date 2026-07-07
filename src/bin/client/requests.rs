@@ -1,10 +1,8 @@
 use std::{collections::HashMap, sync::Arc};
 
+use query::{QueryError, QueryOutput};
 use serde::{Deserialize, Serialize};
-use simply_db::{
-    common_types::{DataValue, Schema},
-    sql::query::{QueryError, QueryOutput},
-};
+use storage::common_types::{DataValue, Schema};
 #[derive(Debug, Clone)]
 pub enum FetchError {
     ReqwestError(Arc<reqwest::Error>),
@@ -62,7 +60,7 @@ pub async fn send_query(url: String, query: String) -> Result<(), FetchError> {
             .send()
             .await?;
         log::debug!("{:?}", response);
-        let output = response
+        let _output = response
             .json::<Vec<Result<QueryOutput, QueryError>>>() //TODO: Add some sort of output for errors
             .await?;
         Ok(())
