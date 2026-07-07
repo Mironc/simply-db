@@ -138,6 +138,17 @@ fn not_applicable() {
         SelectError::ExprErr(ExprError::NotApplicable)
     ));
 }
+#[test]
+fn bad_expr() {
+    let db = setup_database();
+    let filter = SelectQuery::new(
+        "test_table".to_string(),
+        Projection::Row,
+        Some(Expr::Literal(LiteralValue::Text("Bad expr".to_owned()))),
+    );
+    let result = filter.execute(&db);
+    assert_eq!(result, Err(SelectError::BadExpr));
+}
 
 #[test]
 fn logical_and() {

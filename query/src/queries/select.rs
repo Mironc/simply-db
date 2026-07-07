@@ -9,13 +9,14 @@ use storage::{
 use crate::expr::{Expr, ExprError};
 
 #[cfg_attr(feature = "serialize", derive(serde::Serialize, serde::Deserialize))]
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum SelectError {
     /// Table not found
     NoTable {
         table: String,
     },
     ExprErr(ExprError),
+    BadExpr,
 }
 impl From<ExprError> for SelectError {
     fn from(err: ExprError) -> Self {
@@ -76,10 +77,14 @@ impl SelectQuery {
         let mut projected = Vec::new();
         for row in table.rows().iter() {
             if let Some(filter) = &self.filter_expr {
-                if let DataValue::Scalar(ScalarValue::Bool(val)) = *filter.execute(row)?
-                    && val
-                {
-                    projected.push(self.projection.execute(row, table.schema())?);
+                match *filter.execute(row)? {
+                    DataValue::Scalar(ScalarValue::Bool(val)) => {
+                        if val {
+                            projected.push(self.projection.execute(row, table.schema())?);
+                        }
+                    }
+                    DataValue::Null => continue,
+                    _ => return Err(SelectError::BadExpr),
                 }
             } else {
                 projected.push(self.projection.execute(row, table.schema())?);

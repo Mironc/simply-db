@@ -8,7 +8,7 @@ use storage::{
 use crate::expr::{Expr, ExprError};
 
 #[cfg_attr(feature = "serialize", derive(serde::Serialize, serde::Deserialize))]
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum UpdateError {
     ExprErr(ExprError),
     NoTable {
@@ -25,7 +25,7 @@ pub enum UpdateError {
         given: DataValue,
     },
     /// Filter expression returns not bool
-    FilterExpr,
+    BadExpr,
 }
 
 impl From<ExprError> for UpdateError {
@@ -59,7 +59,7 @@ impl UpdateQuery {
                         continue;
                     }
                 } else {
-                    return Err(UpdateError::FilterExpr);
+                    return Err(UpdateError::BadExpr);
                 }
             }
             let mut values = Vec::new();
@@ -117,7 +117,11 @@ mod test {
 
     use crate::{
         expr::{Expr, LiteralValue},
-        queries::{create_table::CreateTable, insert::InsertQuery, update::UpdateQuery},
+        queries::{
+            create_table::CreateTable,
+            insert::InsertQuery,
+            update::{UpdateError, UpdateQuery},
+        },
     };
 
     fn init_db() -> Database {
@@ -190,7 +194,7 @@ mod test {
     }
 
     #[test]
-    fn filter_expression_returns_non_bool() {
+    fn bad_filter_expression() {
         let mut db = init_db();
 
         let update = UpdateQuery::new(
@@ -198,7 +202,7 @@ mod test {
             vec![("age".to_string(), Expr::Literal(LiteralValue::Int(10)))],
             Some(Expr::Literal(LiteralValue::Int(10))),
         );
-        assert!(update.execute(&mut db).is_err());
+        assert_eq!(update.execute(&mut db), Err(UpdateError::BadExpr));
     }
 
     #[test]
