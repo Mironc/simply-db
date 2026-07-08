@@ -103,5 +103,5 @@ cargo run --bin client --release --features="client-deps"
 # Run tests
 cargo test --workspace
 # Run benchmarks
-cargo bench
+cargo bench --workspace
 ```

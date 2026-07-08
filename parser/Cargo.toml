@@ -16,7 +16,6 @@ criterion = {workspace = true}
 [[bench]]
 harness = false
 name = "3_query_parsing"
-required-features = ["bench"]
 
 [[bench]]
 harness = false

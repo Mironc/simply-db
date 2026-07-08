@@ -1,5 +1,5 @@
 use criterion::{Criterion, Throughput, criterion_group, criterion_main};
-use parser::queries::parse_query;
+use parser::queries::query::parse_query;
 use parser::tokenizer::tokenize;
 use std::hint::black_box;
 

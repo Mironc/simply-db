@@ -42,7 +42,7 @@ serde_json = { version = "1.0.115", default-features = false, features = ["alloc
 tokio = { version = "1.0", features = ["rt-multi-thread"], optional = true }
 
 [features]
-default = ["client-deps", "server-deps"]
+# default = ["client-deps", "server-deps"]
 client-deps = ["env_logger", "iced", "reqwest", "serialize", "tokio"]
 serialize = ["serde_json", "storage/serialize","query/serialize"]
 server-deps = ["axum", "chrono", "clap", "dotenv", "env_logger", "serialize", "tokio"]
