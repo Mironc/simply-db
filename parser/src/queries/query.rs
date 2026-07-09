@@ -23,10 +23,7 @@ use crate::tokenizer::Sign;
 
 pub fn parse_query<'a>(tokens: Vec<TokenValue<'a>>) -> ParseResult<'a, Query> {
     let walker = TokenWalker::new(&tokens);
-    match walker
-        .peek_next_meaningful()
-        .ok_or(ParseError::UnknownInstruction)?
-    {
+    match walker.peek_next().ok_or(ParseError::UnknownInstruction)? {
         TokenValue::Keyword("INSERT") => parse_insert_query(walker),
         TokenValue::Keyword("CREATE") => parse_create_query(walker),
         TokenValue::Keyword("SELECT") => parse_select_query(walker),
@@ -39,7 +36,7 @@ pub fn parse_query<'a>(tokens: Vec<TokenValue<'a>>) -> ParseResult<'a, Query> {
 }
 pub(super) fn parse_update_query<'a>(mut walker: TokenWalker<'a, '_>) -> ParseResult<'a, Query> {
     walker.expect_next_token(&TokenValue::Keyword("UPDATE"))?;
-    let table_name_token = walker.next_meaningful().ok_or(ParseError::UnexpectedEof)?;
+    let table_name_token = walker.next().ok_or(ParseError::UnexpectedEof)?;
     if table_name_token.starts_with_digit() || !table_name_token.is_ident() {
         return Err(ParseError::UnexpectedSymbol {
             expected: "valid table name that starts not with digit",
@@ -50,13 +47,13 @@ pub(super) fn parse_update_query<'a>(mut walker: TokenWalker<'a, '_>) -> ParseRe
 
     walker.expect_next_token(&TokenValue::Keyword("SET"))?;
     let mut set_exprs = Vec::new();
-    'outer: while let Some(token) = walker.peek_next_meaningful()
+    'outer: while let Some(token) = walker.peek_next()
         && token != &TokenValue::Keyword("WHERE")
     {
         let field_name = parse_field_name(&mut walker)?;
         walker.expect_next_token(&TokenValue::Sign(Sign::Set))?;
         let mut clone = walker.clone();
-        let mut next_token = walker.next_meaningful();
+        let mut next_token = walker.next();
         while let Some(token) = next_token {
             if token == &TokenValue::Delimiter(Delimiter::Comma) {
                 break;
@@ -65,7 +62,7 @@ pub(super) fn parse_update_query<'a>(mut walker: TokenWalker<'a, '_>) -> ParseRe
                 set_exprs.push((field_name, parse_expr(&mut clone, walker.position())?));
                 break 'outer;
             }
-            next_token = walker.next_meaningful();
+            next_token = walker.next();
         }
         set_exprs.push((field_name, parse_expr(&mut clone, walker.position())?));
     }
@@ -89,19 +86,17 @@ pub(super) fn parse_update_query<'a>(mut walker: TokenWalker<'a, '_>) -> ParseRe
 pub(super) fn parse_select_query<'a>(mut walker: TokenWalker<'a, '_>) -> ParseResult<'a, Query> {
     walker.expect_next_token(&TokenValue::Keyword("SELECT"))?;
 
-    let projection = if walker
-        .peek_next_meaningful()
-        .ok_or(ParseError::UnexpectedEof)?
+    let projection = if walker.peek_next().ok_or(ParseError::UnexpectedEof)?
         == &TokenValue::Sign(Sign::Asterisk)
     {
-        walker.skip_meaningful(1);
+        walker.skip(1);
         walker.expect_next_token(&TokenValue::Keyword("FROM"))?;
         Projection::Row
     } else {
         let mut expressions = Vec::new();
         let mut open = 0;
         let mut walker_new = walker.clone_simple();
-        let mut token = walker.next_meaningful().ok_or(ParseError::UnexpectedEof)?;
+        let mut token = walker.next().ok_or(ParseError::UnexpectedEof)?;
         while token != &TokenValue::Keyword("FROM") {
             if token.to_string() == "(" {
                 open += 1
@@ -116,13 +111,13 @@ pub(super) fn parse_select_query<'a>(mut walker: TokenWalker<'a, '_>) -> ParseRe
                 expressions.push(parse_expr(&mut walker_new, walker.position())?);
                 walker_new = walker.clone_simple();
             }
-            token = walker.next_meaningful().ok_or(ParseError::UnexpectedEof)?;
+            token = walker.next().ok_or(ParseError::UnexpectedEof)?;
         }
         expressions.push(parse_expr(&mut walker_new, walker.position())?);
         Projection::Expr(expressions)
     };
 
-    let table_name_token = walker.next_meaningful().ok_or(ParseError::UnexpectedEof)?;
+    let table_name_token = walker.next().ok_or(ParseError::UnexpectedEof)?;
     if table_name_token.starts_with_digit() || !table_name_token.is_ident() {
         return Err(ParseError::UnexpectedSymbol {
             expected: "valid table name that starts not with digit",
@@ -130,10 +125,10 @@ pub(super) fn parse_select_query<'a>(mut walker: TokenWalker<'a, '_>) -> ParseRe
         });
     }
     let table_name = table_name_token.to_string();
-    let filter_expr = if let Some(TokenValue::Keyword(k)) = walker.peek_next_meaningful()
+    let filter_expr = if let Some(TokenValue::Keyword(k)) = walker.peek_next()
         && *k == "WHERE"
     {
-        walker.skip(2);
+        walker.skip(1);
         let end = walker.tokens().len();
         Some(parse_expr(&mut walker, end)?)
     } else {
@@ -155,16 +150,13 @@ pub(super) fn parse_create_query<'a>(mut walker: TokenWalker<'a, '_>) -> ParseRe
         Some(TokenValue::Keyword("IF")),
         Some(TokenValue::Keyword("NOT")),
         Some(TokenValue::Keyword("EXISTS")),
-    ) = (
-        walker.peek_n_meaningful(1),
-        walker.peek_n_meaningful(2),
-        walker.peek_n_meaningful(3),
-    ) {
+    ) = (walker.peek_n(1), walker.peek_n(2), walker.peek_n(3))
+    {
         if_not_exists = true;
-        walker.skip_meaningful(3).unwrap();
+        walker.skip(3);
     }
     let table_name = {
-        let token = walker.next_meaningful().ok_or(ParseError::UnexpectedEof)?;
+        let token = walker.next().ok_or(ParseError::UnexpectedEof)?;
         if token.is_ident() {
             if !token.starts_with_digit() {
                 token.to_string()
@@ -184,7 +176,7 @@ pub(super) fn parse_create_query<'a>(mut walker: TokenWalker<'a, '_>) -> ParseRe
     Ok(Query::CreateTable(create_table_query))
 }
 pub(super) fn parse_create_fields<'a>(walker: &mut TokenWalker<'a, '_>) -> ParseResult<'a, Schema> {
-    let token = walker.next_meaningful().ok_or(ParseError::UnexpectedEof)?;
+    let token = walker.next().ok_or(ParseError::UnexpectedEof)?;
     if token != &TokenValue::Delimiter(Delimiter::RoundOpen) {
         return Err(ParseError::UnexpectedSymbol {
             expected: "(",
@@ -202,7 +194,7 @@ pub(super) fn parse_create_fields<'a>(walker: &mut TokenWalker<'a, '_>) -> Parse
                 && !field_parsed.2.contains(&FieldModifier::AutoIncrement),
         );
         fields.push((field_parsed.0, field));
-        let token = walker.next_meaningful().ok_or(ParseError::UnexpectedEof)?;
+        let token = walker.next().ok_or(ParseError::UnexpectedEof)?;
         if let TokenValue::Delimiter(Delimiter::RoundClose) = token {
             break;
         }
@@ -221,7 +213,7 @@ pub(super) fn parse_field_and_modifiers<'a>(
 ) -> ParseResult<'a, (String, DataType, FieldModifiers)> {
     let field_name = parse_field_name(walker)?;
     let field_type = {
-        let field_type_token = walker.next_meaningful().ok_or(ParseError::UnexpectedEof)?;
+        let field_type_token = walker.next().ok_or(ParseError::UnexpectedEof)?;
         if let Some(field_type) = ScalarType::from_str(&field_type_token.to_string()) {
             DataType::Scalar(field_type)
         } else {
@@ -231,9 +223,7 @@ pub(super) fn parse_field_and_modifiers<'a>(
         }
     };
     let mut field_modifiers = Vec::new();
-    while let token = walker
-        .peek_next_meaningful()
-        .ok_or(ParseError::UnexpectedEof)?
+    while let token = walker.peek_next().ok_or(ParseError::UnexpectedEof)?
         && (token.is_keyword() || token.is_ident())
     {
         let modifier = parse_field_modifier(walker)?;
@@ -255,7 +245,7 @@ pub enum FieldModifier {
 pub(super) fn parse_field_modifier<'a>(
     walker: &mut TokenWalker<'a, '_>,
 ) -> ParseResult<'a, FieldModifier> {
-    let token = walker.next_meaningful().ok_or(ParseError::UnexpectedEof)?;
+    let token = walker.next().ok_or(ParseError::UnexpectedEof)?;
     if let TokenValue::Keyword(ident) = token {
         match *ident {
             "UNIQUE" => Ok(FieldModifier::Unique),
@@ -285,7 +275,7 @@ pub(super) fn parse_insert_query<'a>(mut walker: TokenWalker<'a, '_>) -> ParseRe
     walker.expect_next_token(&TokenValue::Keyword("INSERT"))?;
     walker.expect_next_token(&TokenValue::Keyword("INTO"))?;
 
-    let table_name = walker.next_meaningful().ok_or(ParseError::UnexpectedEof)?;
+    let table_name = walker.next().ok_or(ParseError::UnexpectedEof)?;
     if !table_name.is_ident() {
         return Err(ParseError::UnexpectedSymbol {
             expected: "Name of the table",
@@ -312,7 +302,7 @@ pub(super) fn parse_insert_query<'a>(mut walker: TokenWalker<'a, '_>) -> ParseRe
         }
         let type_value = SchemaValue::new(map);
         insert_data.push(type_value);
-        if walker.next_meaningful() != Some(&TokenValue::Delimiter(Delimiter::Comma)) {
+        if walker.next() != Some(&TokenValue::Delimiter(Delimiter::Comma)) {
             break;
         }
     }
@@ -323,7 +313,7 @@ pub(super) fn parse_insert_fields<'a>(
     walker: &mut TokenWalker<'a, '_>,
 ) -> ParseResult<'a, Vec<String>> {
     {
-        let token = walker.next_meaningful().ok_or(ParseError::UnexpectedEof)?;
+        let token = walker.next().ok_or(ParseError::UnexpectedEof)?;
         if !matches!(token, TokenValue::Delimiter(Delimiter::RoundOpen)) {
             return Err(ParseError::UnexpectedSymbol {
                 expected: "(",
@@ -333,7 +323,7 @@ pub(super) fn parse_insert_fields<'a>(
     }
     let mut fields = Vec::new();
     loop {
-        let token = walker.next_meaningful().ok_or(ParseError::UnexpectedEof)?;
+        let token = walker.next().ok_or(ParseError::UnexpectedEof)?;
         if !token.is_ident() {
             return Err(ParseError::UnexpectedSymbol {
                 expected: "Expected field name",
@@ -341,7 +331,7 @@ pub(super) fn parse_insert_fields<'a>(
             });
         }
         fields.push(token.to_string());
-        let token = walker.next_meaningful().ok_or(ParseError::UnexpectedEof)?;
+        let token = walker.next().ok_or(ParseError::UnexpectedEof)?;
         if token == &TokenValue::Delimiter(Delimiter::RoundClose) {
             break;
         }
@@ -356,12 +346,12 @@ pub(super) fn parse_insert_fields<'a>(
 }
 /// Parses arbitrary structure of this structure (Value,Value,Value)
 ///
-/// Expects walker's pointer to be next to structure
+/// Expects walker's pointer to be next_meaningful to structure
 pub(super) fn parse_insert_data<'a>(
     walker: &mut TokenWalker<'a, '_>,
 ) -> ParseResult<'a, Vec<DataValue>> {
     {
-        let token = walker.next_meaningful().ok_or(ParseError::UnexpectedEof)?;
+        let token = walker.next().ok_or(ParseError::UnexpectedEof)?;
         if !matches!(token, TokenValue::Delimiter(Delimiter::RoundOpen)) {
             return Err(ParseError::UnexpectedSymbol {
                 expected: "(",
@@ -373,7 +363,7 @@ pub(super) fn parse_insert_data<'a>(
     loop {
         let data = parse_literal(walker)?;
         insert_data.push(data);
-        let token = walker.next_meaningful().ok_or(ParseError::UnexpectedEof)?;
+        let token = walker.next().ok_or(ParseError::UnexpectedEof)?;
         if token == &TokenValue::Delimiter(Delimiter::RoundClose) {
             break;
         }
@@ -390,7 +380,7 @@ pub(super) fn parse_insert_data<'a>(
 pub(super) fn parse_truncate_query<'a>(mut walker: TokenWalker<'a, '_>) -> ParseResult<'a, Query> {
     walker.expect_next_token(&TokenValue::Keyword("TRUNCATE"))?;
     walker.expect_next_token(&TokenValue::Keyword("TABLE"))?;
-    let table_name_token = walker.next_meaningful().ok_or(ParseError::UnexpectedEof)?;
+    let table_name_token = walker.next().ok_or(ParseError::UnexpectedEof)?;
     if table_name_token.starts_with_digit() || !table_name_token.is_ident() {
         return Err(ParseError::UnexpectedSymbol {
             expected: "valid table name that starts not with digit",
@@ -404,7 +394,7 @@ pub(super) fn parse_truncate_query<'a>(mut walker: TokenWalker<'a, '_>) -> Parse
 pub(super) fn parse_drop_query<'a>(mut walker: TokenWalker<'a, '_>) -> ParseResult<'a, Query> {
     walker.expect_next_token(&TokenValue::Keyword("DROP"))?;
     walker.expect_next_token(&TokenValue::Keyword("TABLE"))?;
-    let table_name_token = walker.next_meaningful().ok_or(ParseError::UnexpectedEof)?;
+    let table_name_token = walker.next().ok_or(ParseError::UnexpectedEof)?;
     if table_name_token.starts_with_digit() || !table_name_token.is_ident() {
         return Err(ParseError::UnexpectedSymbol {
             expected: "valid table name that starts not with digit",
@@ -418,7 +408,7 @@ pub(super) fn parse_drop_query<'a>(mut walker: TokenWalker<'a, '_>) -> ParseResu
 pub(super) fn parse_delete_query<'a>(mut walker: TokenWalker<'a, '_>) -> ParseResult<'a, Query> {
     walker.expect_next_token(&TokenValue::Keyword("DELETE"))?;
     walker.expect_next_token(&TokenValue::Keyword("FROM"))?;
-    let table_name_token = walker.next_meaningful().ok_or(ParseError::UnexpectedEof)?;
+    let table_name_token = walker.next().ok_or(ParseError::UnexpectedEof)?;
     if table_name_token.starts_with_digit() || !table_name_token.is_ident() {
         return Err(ParseError::UnexpectedSymbol {
             expected: "valid table name that starts not with digit",

@@ -6,7 +6,7 @@ use std::hint::black_box;
 // Helper macro to query_parse a string cleanly in tests
 macro_rules! query_parse {
     ($input:expr) => {{
-        let tokens = tokenize($input);
+        let tokens = tokenize($input).unwrap();
         parse_query(tokens)
     }};
 }

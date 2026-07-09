@@ -10,12 +10,12 @@ use crate::{
 #[test]
 fn insert_fields_success() {
     // Test with one field
-    let tokens = tokenize("(field1)");
+    let tokens = tokenize("(field1)").unwrap();
     let mut walker = TokenWalker::new(&tokens);
     let result = parse_insert_fields(&mut walker);
     assert_eq!(result, Ok(vec!["field1".to_string()]));
     // Test with multiple fields
-    let tokens = tokenize("(field1, field2, field3)");
+    let tokens = tokenize("(field1, field2, field3)").unwrap();
     let mut walker = TokenWalker::new(&tokens);
     let result = parse_insert_fields(&mut walker);
     assert_eq!(
@@ -30,7 +30,7 @@ fn insert_fields_success() {
 
 #[test]
 fn insert_fields_empty() {
-    let tokens = tokenize("( )");
+    let tokens = tokenize("( )").unwrap();
     let mut walker = TokenWalker::new(&tokens);
 
     let result = parse_insert_fields(&mut walker);
@@ -47,7 +47,7 @@ fn insert_fields_empty() {
 #[test]
 fn insert_data_success() {
     // Parsing insert data with mulptiple fields
-    let tokens = tokenize("('test' , '1')");
+    let tokens = tokenize("('test' , '1')").unwrap();
     let mut walker = TokenWalker::new(&tokens);
 
     let result = parse_insert_data(&mut walker);
@@ -60,7 +60,7 @@ fn insert_data_success() {
 
 #[test]
 fn insert_row_count_mismatch() {
-    let tokens = tokenize(" INSERT  INTO table1  (f1,f2) VALUES  ('text')");
+    let tokens = tokenize(" INSERT  INTO table1  (f1,f2) VALUES  ('text')").unwrap();
     let walker = TokenWalker::new(&tokens);
 
     let insert_query = parse_insert_query(walker);
@@ -77,7 +77,8 @@ fn insert_row_count_mismatch() {
 #[test]
 fn insert_query() {
     // Test insert query with multiple fields one row
-    let tokens = tokenize("INSERT INTO table (int, string) VALUES (100, 'text' )");
+    let tokens = tokenize("INSERT INTO table (int, string) VALUES (100, 'text' )").unwrap();
+    println!("{:?}", tokens);
     let insert_query = parse_query(tokens);
     let values = hashmap!(
             "int".to_owned()=> scalar!(Int(100)),
@@ -88,7 +89,8 @@ fn insert_query() {
 
     // Test insert query with multiple fields with multiple rows
     let tokens =
-        tokenize("INSERT INTO table (int, string) VALUES (100, 'text'), (50, 't'),(17, 'Steve')");
+        tokenize("INSERT INTO table (int, string) VALUES (100, 'text'), (50, 't'),(17, 'Steve')")
+            .unwrap();
     let walker = TokenWalker::new(&tokens);
     let insert_query = parse_insert_query(walker);
     let mut rows = Vec::new();

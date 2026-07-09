@@ -14,8 +14,8 @@ pub fn parse_query_request<'a>(source: &'a str) -> Result<QueryRequest, ParseErr
         .split(';')
         .filter(|x| !x.is_empty())
         .map(|x| {
-            let tokens = tokenize(x);
-            parse_query(tokens)
+            let tokens = tokenize(x)?;
+            Ok(parse_query(tokens)?)
         })
         .collect::<Result<Vec<Query>, ParseError>>()?;
 

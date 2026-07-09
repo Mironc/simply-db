@@ -13,7 +13,8 @@ use crate::{
 #[test]
 fn create_table_success() {
     let tokens =
-        tokenize("CREATE TABLE IF NOT EXISTS users (id INT PRIMARY KEY, name TEXT NOT NULL)");
+        tokenize("CREATE TABLE IF NOT EXISTS users (id INT PRIMARY KEY, name TEXT NOT NULL)")
+            .unwrap();
 
     let walker = TokenWalker::new(&tokens);
     let query = parse_create_query(walker);
@@ -27,7 +28,7 @@ fn create_table_success() {
 }
 #[test]
 fn create_table_no_modifiers() {
-    let tokens = tokenize("CREATE TABLE IF NOT EXISTS users (id INT, name TEXT)");
+    let tokens = tokenize("CREATE TABLE IF NOT EXISTS users (id INT, name TEXT)").unwrap();
 
     let walker = TokenWalker::new(&tokens);
     let query = parse_create_query(walker);
@@ -41,7 +42,7 @@ fn create_table_no_modifiers() {
 }
 #[test]
 fn create_table_unknown_modifier() {
-    let tokens = tokenize("CREATE TABLE IF NOT EXISTS users (id INT baba)");
+    let tokens = tokenize("CREATE TABLE IF NOT EXISTS users (id INT baba)").unwrap();
 
     let walker = TokenWalker::new(&tokens);
     let query = parse_create_query(walker);
@@ -51,7 +52,8 @@ fn create_table_unknown_modifier() {
 #[test]
 fn create_table_unexpected_token() {
     let tokens =
-        tokenize("CREATE TABLE IF NOT EXISTS%users (id INT PRIMARY KEY, name TEXT NOT NULL)");
+        tokenize("CREATE TABLE IF NOT EXISTS%users (id INT PRIMARY KEY, name TEXT NOT NULL)")
+            .unwrap();
     println!("{:?}", tokens);
     let walker = TokenWalker::new(&tokens);
     let query = parse_create_query(walker);

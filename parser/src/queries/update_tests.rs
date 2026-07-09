@@ -12,7 +12,7 @@ use crate::{
 // 1. Successful test: Basic UPDATE query without WHERE clause
 #[test]
 fn update_basic() {
-    let tokens = tokenize("UPDATE users SET age=25");
+    let tokens = tokenize("UPDATE users SET age=25").unwrap();
     let walker = TokenWalker::new(&tokens);
 
     let res = parse_update_query(walker);
@@ -31,7 +31,7 @@ fn update_basic() {
 // 2. Successful test: UPDATE query with multiple field assignments
 #[test]
 fn update_multiple_fields() {
-    let tokens = tokenize("UPDATE users SET age=25, name='John'");
+    let tokens = tokenize("UPDATE users SET age=25, name='John'").unwrap();
     let walker = TokenWalker::new(&tokens);
 
     let res = parse_update_query(walker);
@@ -48,6 +48,7 @@ fn update_multiple_fields() {
         );
         assert!(query.filter_expr().is_none());
     } else {
+        println!("got {:?}", res);
         panic!("Expected update query");
     }
 }
@@ -55,7 +56,7 @@ fn update_multiple_fields() {
 // 3. Successful test: UPDATE query with WHERE clause
 #[test]
 fn update_with_where() {
-    let tokens = tokenize("UPDATE users SET age=25 WHERE age > 18");
+    let tokens = tokenize("UPDATE users SET age=25 WHERE age > 18").unwrap();
     let walker = TokenWalker::new(&tokens);
 
     let res = parse_update_query(walker);
@@ -74,7 +75,7 @@ fn update_with_where() {
 // 4. Test on error: Table name starts with digit (invalid identifier)
 #[test]
 fn invalid_table_name() {
-    let tokens = tokenize("UPDATE 123users SET age=25");
+    let tokens = tokenize("UPDATE 123users SET age=25").unwrap();
     let walker = TokenWalker::new(&tokens);
 
     let res = parse_update_query(walker);
@@ -89,7 +90,7 @@ fn invalid_table_name() {
 // 5. Test on error: Missing SET clause after UPDATE
 #[test]
 fn missing_set_clause() {
-    let tokens = tokenize("UPDATE users");
+    let tokens = tokenize("UPDATE users").unwrap();
     let walker = TokenWalker::new(&tokens);
 
     let res = parse_update_query(walker);
@@ -138,7 +139,7 @@ fn missing_set_clause() {
 // 8. Test on error: Invalid field name in SET clause (should be identifier)
 #[test]
 fn invalid_field_name() {
-    let tokens = tokenize("UPDATE users SET 123age=25");
+    let tokens = tokenize("UPDATE users SET 123age=25").unwrap();
     let walker = TokenWalker::new(&tokens);
 
     let res = parse_update_query(walker);

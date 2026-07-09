@@ -4,7 +4,7 @@ use query::expr::{ArithmeticOp, ComparisonOp, Expr, LiteralValue, LogicOp};
 
 use crate::common::{
     ExpectExprErr, ParseError, ParseResult, TokenWalker, parse_bool_null_literal, parse_field_name,
-    parse_number_literal, parse_string_literal,
+    parse_number_literal,
 };
 
 use crate::tokenizer::{Delimiter, Sign, TokenValue};
@@ -55,17 +55,9 @@ const ORDER: [for<'a> fn(
 /// Internal backtrack-recursive parsing function
 pub fn internal_parse_expr<'a>(
     walker: &mut TokenWalker<'a, '_>,
-    mut end: usize,
+    end: usize,
     memo: &mut Cache<'a>,
 ) -> ExprParseResult<'a, Expr> {
-    let tokens = walker.tokens();
-    while end != 0 {
-        if tokens[end - 1] != TokenValue::Blank {
-            break;
-        }
-        end -= 1;
-    }
-    //println!("{:?}", &tokens[walker.position()..end]);
     let start = walker.position();
     if let Some(err) = memo.get(&(start, end)) {
         return Err(err.clone());
@@ -127,7 +119,7 @@ pub fn parse_brackets<'a>(
     // Initially points to SOF
     let mut first_bracket = 0;
     while walker.position() < end {
-        let token = walker.next_meaningful().ok_or(ParseError::UnexpectedEof)?;
+        let token = walker.next().ok_or(ParseError::UnexpectedEof)?;
         if token == &TokenValue::Delimiter(Delimiter::RoundOpen) {
             let pos = walker.position();
             if pos >= end {
@@ -171,12 +163,12 @@ pub fn parse_not<'a>(
     end: usize,
     memo: &mut Cache<'a>,
 ) -> ExprParseResult<'a, Expr> {
-    // Comparing with 3 because it look like this (NOT, blank, expr)
-    if end - walker.position() < 3 {
+    // Comparing with 2 because it look like this (NOT, expr)
+    if end - walker.position() < 2 {
         return Err(ParseError::WrongPattern);
     }
     while walker.position() < end {
-        let token = walker.next_meaningful().ok_or(ParseError::UnexpectedEof)?;
+        let token = walker.next().ok_or(ParseError::UnexpectedEof)?;
         if token == &TokenValue::Keyword("NOT".into()) {
             let pos = walker.position();
             if pos >= end {
@@ -210,7 +202,7 @@ macro_rules! parse_binary {
             let mut most_meaningful_err = None;
             let mut max_consumed = start;
             while walker.position() < end {
-                let token = if let Some(token) = walker.next_meaningful(){
+                let token = if let Some(token) = walker.next(){
                     token
                 }
                 else{
@@ -348,9 +340,7 @@ pub fn parse_literal_or_field<'a>(
     _: usize,
     _: &mut Cache<'a>,
 ) -> ExprParseResult<'a, Expr> {
-    let token = walker
-        .peek_next_meaningful()
-        .ok_or(ParseError::UnexpectedEof)?;
+    let token = walker.peek_next().ok_or(ParseError::UnexpectedEof)?;
     match token {
         TokenValue::Ident(ident) => {
             if ident.chars().all(char::is_numeric) {
@@ -362,10 +352,6 @@ pub fn parse_literal_or_field<'a>(
             Ok(Expr::Field(parse_field_access(walker)?))
         }
         TokenValue::Delimiter(delimiter) => match delimiter {
-            Delimiter::Apostrophe => Ok(Expr::Literal(
-                LiteralValue::from_value(parse_string_literal(walker)?)
-                    .expect("Got non-string output from parse_string_literal() function"),
-            )),
             _ => Err(ParseError::UnexpectedSymbol {
                 expected: "literal or field access",
                 given: token.as_str(),
@@ -385,6 +371,11 @@ pub fn parse_literal_or_field<'a>(
             LiteralValue::from_value(parse_bool_null_literal(walker)?)
                 .expect("Got non-bool, non-null output from parse_bool_null_literal() function"),
         )),
+        TokenValue::TextLiteral(text) => {
+            let lit_value = LiteralValue::Text((*text).to_owned());
+            walker.skip(1);
+            Ok(Expr::Literal(lit_value))
+        }
         _ => Err(ParseError::UnexpectedSymbol {
             expected: "literal or field access",
             given: token.as_str(),

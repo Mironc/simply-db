@@ -4,8 +4,7 @@ use std::ops::Deref;
 // Helper macro to parse a string cleanly in tests
 macro_rules! parse {
     ($input:expr) => {{
-        let mut tokens = tokenize($input);
-        tokens.push(TokenValue::Blank);
+        let tokens = tokenize($input).unwrap();
         let mut walker = TokenWalker::new(&tokens);
         parse_expr(&mut walker, tokens.len())
     }};
@@ -16,8 +15,7 @@ fn null_row() -> Row {
 #[test]
 fn arithmetic() {
     let expr = {
-        let mut tokens = tokenize("5+3");
-        tokens.push(TokenValue::Blank);
+        let tokens = tokenize("5+3").unwrap();
         parse_expr(&mut TokenWalker::new(&tokens), tokens.len())
     };
 
@@ -93,6 +91,17 @@ fn field_references() {
     row_data.insert("id".to_string(), DataValue::Scalar(ScalarValue::Int(1)));
     let row = Row::new(SchemaValue::new(row_data));
     assert_eq!(expr.unwrap().execute(&row).unwrap().deref(), &expected);
+}
+
+#[test]
+fn text_literal() {
+    let expr = parse!("'A' > 'B'");
+
+    let expected = DataValue::Scalar(ScalarValue::Bool(false));
+    assert_eq!(
+        expr.unwrap().execute(&null_row()).unwrap().deref(),
+        &expected
+    );
 }
 
 #[test]
@@ -211,11 +220,7 @@ use rstest::rstest;
 use storage::common_types::{DataValue, ScalarValue, SchemaValue};
 use storage::row::Row;
 
-use crate::{
-    common::TokenWalker,
-    queries::expr::parse_expr,
-    tokenizer::{TokenValue, tokenize},
-};
+use crate::{common::TokenWalker, queries::expr::parse_expr, tokenizer::tokenize};
 
 /// First one is literal, second one is how it named in test
 struct Op(&'static str, &'static str);

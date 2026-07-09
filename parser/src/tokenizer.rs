@@ -1,30 +1,20 @@
 use std::fmt::Display;
 
+use crate::common::ParseError;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TokenValue<'a> {
     Ident(&'a str),
     Sign(Sign),
     Delimiter(Delimiter),
     Keyword(&'a str),
-    /// New line or space
-    Blank,
+    TextLiteral(&'a str),
     /// Start of the file
     SOF,
 }
 impl<'a> Display for TokenValue<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "{}",
-            match self {
-                TokenValue::Ident(w) => w,
-                TokenValue::Sign(sign) => sign.as_str(),
-                TokenValue::Delimiter(delimiter) => delimiter.as_str(),
-                TokenValue::Keyword(k) => k,
-                TokenValue::Blank => " ",
-                TokenValue::SOF => "Sof",
-            }
-        )
+        write!(f, "{}", self.as_str())
     }
 }
 impl<'a> TokenValue<'a> {
@@ -44,8 +34,8 @@ impl<'a> TokenValue<'a> {
             TokenValue::Sign(sign) => sign.as_str(),
             TokenValue::Delimiter(delimiter) => delimiter.as_str(),
             TokenValue::Keyword(k) => k,
-            TokenValue::Blank => " ",
             TokenValue::SOF => "Sof",
+            TokenValue::TextLiteral(l) => l,
         }
     }
     pub fn is_ident(&self) -> bool {
@@ -53,9 +43,6 @@ impl<'a> TokenValue<'a> {
     }
     pub fn is_keyword(&self) -> bool {
         matches!(self, TokenValue::Keyword(_))
-    }
-    pub fn is_blank(&self) -> bool {
-        matches!(self, TokenValue::Blank)
     }
     pub fn is_sof(&self) -> bool {
         matches!(self, TokenValue::SOF)
@@ -103,7 +90,7 @@ implement_special_character!(
     (RoundClose, ")"),
     (BlockOpen, "["),
     (BlockClose, "]"),
-    (Apostrophe, "'"),
+    //(Apostrophe, "'"), Reserved for TextLiteral
     (Comma, ","),
     (Dot, "."),
     (Semicolon, ";"),
@@ -202,18 +189,35 @@ lookup_fn!(
 );
 
 /// Turns string into vector of tokens
-pub fn tokenize(source: &str) -> Vec<TokenValue<'_>> {
+pub fn tokenize<'a>(source: &'a str) -> Result<Vec<TokenValue<'a>>, ParseError<'a>> {
     let source = source.trim();
     let mut char_ind = source.char_indices().peekable();
     let mut tokens = Vec::with_capacity(50);
     tokens.push(TokenValue::SOF);
     while let Some(&(ind, char)) = char_ind.peek() {
         if char.is_whitespace() {
-            tokens.push(TokenValue::Blank);
             char_ind.next();
             continue;
         }
-
+        if char == '\'' {
+            char_ind.next();
+            let start = ind + char.len_utf8();
+            let mut end = start;
+            while let Some(&(ind, c)) = char_ind.peek()
+                && c != '\''
+            {
+                end = ind + c.len_utf8();
+                char_ind.next();
+            }
+            if let Some((_, c)) = char_ind.next()
+                && c == '\''
+            {
+                tokens.push(TokenValue::TextLiteral(&source[start..end]));
+                continue;
+            } else {
+                return Err(ParseError::UnclosedBracket('\''));
+            }
+        }
         if !char.is_alphanumeric() && !char.is_whitespace() && char != '_' {
             let start_ind = ind;
             char_ind.next();
@@ -249,12 +253,12 @@ pub fn tokenize(source: &str) -> Vec<TokenValue<'_>> {
             tokens.push(TokenValue::Ident(&source[start..end]));
         }
     }
-    tokens
+    Ok(tokens)
 }
 
 #[cfg(test)]
 mod tests {
-    use crate as parser;
+    use crate::{self as parser, common::ParseError};
     use parser::tokenizer::{TokenValue, tokenize};
 
     /// Easier TokenValue creation
@@ -271,8 +275,8 @@ mod tests {
         (Sign($value:ident)) => {
             parser::tokenizer::TokenValue::Sign(parser::tokenizer::Sign::$value)
         };
-        () => {
-            parser::tokenizer::TokenValue::Blank
+        (TextLiteral($value:literal)) => {
+            parser::tokenizer::TokenValue::TextLiteral($value)
         };
     }
 
@@ -281,23 +285,16 @@ mod tests {
         let string = "SELECT price FROM Prices WHERE price < 100";
         let tokenized = tokenize(string);
         assert_eq!(
-            tokenized,
+            tokenized.unwrap(),
             vec![
                 TokenValue::SOF,
                 token!(Keyword("SELECT")),
-                token!(),
                 token!(Ident("price")),
-                token!(),
                 token!(Keyword("FROM")),
-                token!(),
                 token!(Ident("Prices")),
-                token!(),
                 token!(Keyword("WHERE")),
-                token!(),
                 token!(Ident("price")),
-                token!(),
                 token!(Sign(Less)),
-                token!(),
                 token!(Ident("100"))
             ]
         );
@@ -305,23 +302,16 @@ mod tests {
         let string = "SELECT price FROM Prices WHERE price <= 100";
         let tokenized = tokenize(string);
         assert_eq!(
-            tokenized,
+            tokenized.unwrap(),
             vec![
                 TokenValue::SOF,
                 token!(Keyword("SELECT")),
-                token!(),
                 token!(Ident("price")),
-                token!(),
                 token!(Keyword("FROM")),
-                token!(),
                 token!(Ident("Prices")),
-                token!(),
                 token!(Keyword("WHERE")),
-                token!(),
                 token!(Ident("price")),
-                token!(),
                 token!(Sign(LessEq)),
-                token!(),
                 token!(Ident("100")),
             ]
         );
@@ -329,24 +319,17 @@ mod tests {
         let string = "SELECT price FROM Prices WHERE (price >= 100)";
         let tokenized = tokenize(string);
         assert_eq!(
-            tokenized,
+            tokenized.unwrap(),
             vec![
                 TokenValue::SOF,
                 token!(Keyword("SELECT")),
-                token!(),
                 token!(Ident("price")),
-                token!(),
                 token!(Keyword("FROM")),
-                token!(),
                 token!(Ident("Prices")),
-                token!(),
                 token!(Keyword("WHERE")),
-                token!(),
                 token!(Delimiter(RoundOpen)),
                 token!(Ident("price")),
-                token!(),
                 token!(Sign(GreaterEq)),
-                token!(),
                 token!(Ident("100")),
                 token!(Delimiter(RoundClose)),
             ]
@@ -355,47 +338,39 @@ mod tests {
         let string = "INSERT INTO Items (price,name) VALUES (50,'Egg')";
         let tokenized = tokenize(string);
         assert_eq!(
-            tokenized,
+            tokenized.unwrap(),
             vec![
                 TokenValue::SOF,
                 token!(Keyword("INSERT")),
-                token!(),
                 token!(Keyword("INTO")),
-                token!(),
                 token!(Ident("Items")),
-                token!(),
                 token!(Delimiter(RoundOpen)),
                 token!(Ident("price")),
                 token!(Delimiter(Comma)),
                 token!(Ident("name")),
                 token!(Delimiter(RoundClose)),
-                token!(),
                 token!(Keyword("VALUES")),
-                token!(),
                 token!(Delimiter(RoundOpen)),
                 token!(Ident("50")),
                 token!(Delimiter(Comma)),
-                token!(Delimiter(Apostrophe)),
-                token!(Ident("Egg")),
-                token!(Delimiter(Apostrophe)),
+                token!(TextLiteral("Egg")),
                 token!(Delimiter(RoundClose)),
             ]
         );
+    }
+    #[test]
+    fn unclosed_text_literal() {
+        let string = "' unclosed";
+        let tokenized = tokenize(string);
+        assert_eq!(tokenized, Err(ParseError::UnclosedBracket('\'')))
     }
     #[test]
     fn multiple_blanks() {
         let string = "'hello  '";
         let tokenized = tokenize(string);
         assert_eq!(
-            tokenized,
-            vec![
-                TokenValue::SOF,
-                token!(Delimiter(Apostrophe)),
-                token!(Ident("hello")),
-                token!(),
-                token!(),
-                token!(Delimiter(Apostrophe)),
-            ]
+            tokenized.unwrap(),
+            vec![TokenValue::SOF, token!(TextLiteral("hello  ")),]
         );
     }
 
@@ -404,13 +379,11 @@ mod tests {
         let string = "u s c";
         let tokenized = tokenize(string);
         assert_eq!(
-            tokenized,
+            tokenized.unwrap(),
             vec![
                 TokenValue::SOF,
                 token!(Ident("u")),
-                token!(),
                 token!(Ident("s")),
-                token!(),
                 token!(Ident("c"))
             ]
         );
@@ -419,13 +392,12 @@ mod tests {
     #[test]
     fn snake_case_ident() {
         let string = "is_active how_to_come_up_with_good_ident";
-        let tokenized = tokenize(string);
+        let tokenized = tokenize(string).unwrap();
         assert_eq!(
             tokenized,
             vec![
                 TokenValue::SOF,
                 token!(Ident("is_active")),
-                token!(),
                 token!(Ident("how_to_come_up_with_good_ident")),
             ]
         );
@@ -433,9 +405,9 @@ mod tests {
 
     #[test]
     fn all_special_characters() {
-        let string = "~`!@#$%^&*()-+={[}]|:;'<,>.?/\"";
-        let tokenized = tokenize(string);
-        // -1 to remove
+        let string = "~`!@#$%^&*()-+={[}]|:;<,>.?/\"";
+        let tokenized = tokenize(string).unwrap();
+        // -1 to remove SOF token
         assert_eq!(tokenized.len() - 1, string.len())
     }
 }

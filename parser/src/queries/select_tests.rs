@@ -9,7 +9,7 @@ use crate::{
 // 1. Успешный тест: Базовый SELECT * FROM table
 #[test]
 fn select_asterisk() {
-    let tokens = tokenize("SELECT * FROM users");
+    let tokens = tokenize("SELECT * FROM users").unwrap();
     let walker = TokenWalker::new(&tokens);
 
     let res = parse_select_query(walker);
@@ -26,7 +26,7 @@ fn select_asterisk() {
 // 2. Успешный тест: SELECT * FROM table WHERE condition
 #[test]
 fn select_with_where() {
-    let tokens = tokenize("SELECT * FROM products WHERE price");
+    let tokens = tokenize("SELECT * FROM products WHERE price").unwrap();
     let walker = TokenWalker::new(&tokens);
 
     let res = parse_select_query(walker);
@@ -45,7 +45,7 @@ fn select_with_where() {
 // 3. Тест на ошибку: Пропущен токен SELECT в начале
 #[test]
 fn missing_select_keyword() {
-    let tokens = tokenize("NOT_SELECT *");
+    let tokens = tokenize("NOT_SELECT *").unwrap();
     let walker = TokenWalker::new(&tokens);
 
     let res = parse_select_query(walker);
@@ -58,7 +58,7 @@ fn missing_select_keyword() {
 // 4. Тест на ошибку: Имя таблицы начинается с цифры
 #[test]
 fn invalid_table_name_digit() {
-    let tokens = tokenize("SELECT * FROM 123users");
+    let tokens = tokenize("SELECT * FROM 123users").unwrap();
     let walker = TokenWalker::new(&tokens);
 
     let res = parse_select_query(walker);
@@ -73,7 +73,7 @@ fn invalid_table_name_digit() {
 // 5. Тест на ошибку: Незакрытая скобка внутри проекций полей
 #[test]
 fn unclosed_bracket_in_projection() {
-    let tokens = tokenize("SELECT (id,)) FROM");
+    let tokens = tokenize("SELECT (id,)) FROM").unwrap();
     let walker = TokenWalker::new(&tokens);
 
     let res = parse_select_query(walker);
@@ -85,7 +85,7 @@ fn unclosed_bracket_in_projection() {
 // так как "age" не запишется в вектор expressions.
 #[test]
 fn multiple_expressions_projection() {
-    let tokens = tokenize("SELECT id, age, is_active FROM users");
+    let tokens = tokenize("SELECT id, age, is_active FROM users").unwrap();
     println!("{:?}", tokens);
     let walker = TokenWalker::new(&tokens);
 
@@ -107,7 +107,7 @@ fn multiple_expressions_projection() {
 }
 #[test]
 fn select_with_complex_where() {
-    let tokens = tokenize("SELECT age FROM users WHERE age > 18");
+    let tokens = tokenize("SELECT age FROM users WHERE age > 18").unwrap();
     let walker = TokenWalker::new(&tokens);
 
     let res = parse_select_query(walker);
@@ -121,6 +121,7 @@ fn select_with_complex_where() {
             "filter expr shouldn't be empty"
         );
     } else {
+        println!("{:?}", res);
         panic!("expected select query");
     }
 }
