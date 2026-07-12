@@ -23,3 +23,22 @@ jobs:
 
       - name: Run tests
         run: cargo test --workspace --all-targets
+  build-executables:
+    name: Test executable building
+    runs-on: ubuntu-latest
+    needs: run-tests
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Enable Rust Cache
+        uses: Swatinem/rust-cache@v2
+
+      - name: Test builds
+        run: |
+            cargo build --bin server --features="server-deps"
+            cargo build --bin client --features="client-deps"
