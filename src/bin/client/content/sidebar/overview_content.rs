@@ -46,7 +46,7 @@ impl OverviewContent {
         let content = if is_expanded {
             let mut content = widget::Column::new();
             if let Some(overview) = global_data.fetched_overview() {
-                for x in overview.tables().keys() {
+                for x in overview.schemas().keys() {
                     content = content.push(
                         widget::button(widget::text(x).style(|_th| text_style()))
                             .on_press(Message::TableChoiceButton(x.clone()))

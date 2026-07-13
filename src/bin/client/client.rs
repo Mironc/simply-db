@@ -1,10 +1,11 @@
 use iced::widget::pane_grid;
+use net::objects::Overview;
 use storage::common_types::DataValue;
 
 use crate::{
     content::{Content, primary::PrimaryPage},
     global_data::GlobalData,
-    requests::{FetchError, Overview},
+    requests::FetchError,
 };
 
 mod content;

@@ -1,6 +1,7 @@
 use query::{Query, QueryRequest};
 
-use crate::{common::ParseError, queries::query::parse_query, tokenizer::tokenize};
+use crate::{queries::query::parse_query, tokenizer::tokenize};
+pub use common::{ExpectExprErr, ParseError};
 
 #[doc(hidden)]
 pub mod common;

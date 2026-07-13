@@ -1,0 +1,14 @@
+[package]
+name = "net"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+axum = { workspace = true, optional = true }
+parser = { path = "../parser/" }
+query = { path = "../query/", features = ["serialize"] }
+serde = { workspace = true }
+storage = { path = "../storage/", features = ["serialize"] }
+
+[features]
+server = ["axum"]

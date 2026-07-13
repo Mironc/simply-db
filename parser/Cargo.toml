@@ -3,16 +3,6 @@ name = "parser"
 version = "0.1.0"
 edition = "2024"
 
-[dependencies]
-query = {path = "../query/"}
-storage = { path = "../storage/"}
-foldhash = "0.2.0"
-
-[dev-dependencies]
-rstest = {workspace = true}
-boa_engine = {workspace = true}
-criterion = {workspace = true}
-
 [[bench]]
 harness = false
 name = "3_query_parsing"
@@ -29,5 +19,12 @@ name = "1_tokenizer"
 harness = false
 name = "0_bench_cmp"
 
-[features]
-serialize = []
+[dependencies]
+foldhash = "0.2.0"
+query = { path = "../query/" }
+storage = { path = "../storage/" }
+
+[dev-dependencies]
+boa_engine = { workspace = true }
+criterion = { workspace = true }
+rstest = { workspace = true }

@@ -1,10 +1,7 @@
-
+use net::objects::Overview;
 use storage::common_types::DataValue;
 
-use crate::{
-    AsyncMessage, Message,
-    requests::Overview,
-};
+use crate::{AsyncMessage, Message};
 
 #[derive(Debug, Clone, Default)]
 pub struct GlobalData {
@@ -47,11 +44,11 @@ impl GlobalData {
                 },
                 AsyncMessage::FetchTableResult(items) => match items {
                     Ok(items) => self.fetched_rows = Some(items.clone()),
-                    Err(e) => log::error!("{:?}", e),
+                    Err(e) => log::error!("while fetching table: {:?}", e),
                 },
                 AsyncMessage::QueryResult(result) => match result {
                     Ok(_) => (),
-                    Err(e) => log::error!("{:?}", e),
+                    Err(e) => log::error!("while sending query: {:?}", e),
                 },
                 _ => (),
             },

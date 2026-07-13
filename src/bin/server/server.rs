@@ -1,3 +1,5 @@
+use net::objects::ParseErrorDTO;
+use net::{objects::*, requests::*};
 use stats_alloc::StatsAlloc;
 use std::alloc::System;
 use std::collections::HashMap;
@@ -8,12 +10,9 @@ use std::sync::Arc;
 static ALLOCATOR: StatsAlloc<System> = StatsAlloc::system();
 use axum::Json;
 use axum::extract::State;
-use axum::response::IntoResponse;
 use axum::routing::post;
 use axum::{Router, routing::get};
 use clap::Parser;
-use serde::{Deserialize, Serialize};
-use storage::common_types::{DataValue, Schema};
 use storage::db::Database;
 use tokio::net::TcpListener;
 
@@ -99,51 +98,39 @@ pub async fn main() -> std::io::Result<()> {
     axum::serve(listener, router).await?;
     Ok(())
 }
-#[derive(Debug, Serialize, Deserialize)]
-pub struct ReturnValue {
-    value: Vec<Vec<DataValue>>,
-}
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct QueryQuery {
-    sql: String,
-}
+#[axum::debug_handler]
 pub async fn query(
     State(state): State<DBState>,
-    Json(query): Json<QueryQuery>,
-) -> Result<impl IntoResponse, String> {
-    log::info!("Got query {}", query.sql);
+    Json(query): Json<SqlQueryRequest>,
+) -> Result<Json<SqlQueryOutput>, ParseErrorDTO> {
+    log::info!("Got query {}", query.sql());
     let instant = std::time::Instant::now();
-    let query_req = parser::parse_query_request(query.sql.trim_matches('\"'))
-        .map_err(|e| format!("Err:{:?}", e))?;
+    let owned = query.sql().trim_matches('\"').to_string();
+    let query_req = parser::parse_query_request(&owned)?;
     log::info!(
         "Took {} s to parse query \"{}\"",
         instant.elapsed().as_secs_f32(),
-        query.sql
+        owned
     );
     let instant = std::time::Instant::now();
     let res = query_req.execute(&state.db);
     log::info!(
         "Took {} s to execute query \"{}\"",
         instant.elapsed().as_secs_f32(),
-        query.sql
+        owned
     );
-    Ok(Json(res))
+    Ok(Json(SqlQueryOutput::new(res)))
 }
-#[derive(Debug, Serialize, Deserialize)]
-pub struct Overview {
-    overview: HashMap<String, Schema>,
-}
-pub async fn overview(State(state): State<DBState>) -> Result<impl IntoResponse, String> {
+pub async fn overview(State(state): State<DBState>) -> Json<Overview> {
     log::info!("overview request");
-    let mut overview = HashMap::new();
+    let mut overview_data = HashMap::new();
     for s in state.db.tables().iter() {
-        overview.insert(s.0.clone(), s.1.schema().clone());
+        overview_data.insert(s.0.clone(), s.1.schema().clone());
     }
-    let res = Overview { overview };
-    Ok(Json(res))
+    let res = Overview::new(overview_data);
+    Json(res)
 }
-
-pub async fn health_handle() -> Json<serde_json::Value> {
+pub async fn health_handle() -> Json<Health> {
     let time = chrono::Utc::now();
     let stats = ALLOCATOR.stats();
 
@@ -151,13 +138,12 @@ pub async fn health_handle() -> Json<serde_json::Value> {
         .bytes_allocated
         .saturating_sub(stats.bytes_deallocated)
         / 1024;
-    serde_json::json!(
-    {
-        "status" : "healthy",
-        "current_time" : time.to_rfc3339(),
-        "allocated_memory": current_heap_size_kb,
-    })
-    .into()
+    let health = Health::new(
+        DatabaseState::Healthy,
+        time.to_rfc3339(),
+        MemoryMetrics::new(current_heap_size_kb),
+    );
+    health.into()
 }
 pub async fn ping_handle() -> String {
     "pong".into()

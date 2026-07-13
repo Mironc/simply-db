@@ -1,4 +1,3 @@
-
 use iced::{
     Alignment, Length,
     widget::{self, container},
@@ -42,7 +41,7 @@ impl TableViewer {
         );
         let content: iced::Element<_> = if let Some(rows) = global_data.fetched_rows()
             && let Some(table) = global_data.chosen_table()
-            && let Some(schemas) = global_data.fetched_overview().map(|x| x.tables())
+            && let Some(schemas) = global_data.fetched_overview().map(|x| x.schemas())
             && let Some(schema) = schemas.get(table)
         {
             let mut columns = Vec::new();
