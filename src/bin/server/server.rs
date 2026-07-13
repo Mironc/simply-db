@@ -1,7 +1,11 @@
+use stats_alloc::StatsAlloc;
+use std::alloc::System;
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
+#[global_allocator]
+static ALLOCATOR: StatsAlloc<System> = StatsAlloc::system();
 use axum::Json;
 use axum::extract::State;
 use axum::response::IntoResponse;
@@ -141,10 +145,17 @@ pub async fn overview(State(state): State<DBState>) -> Result<impl IntoResponse,
 
 pub async fn health_handle() -> Json<serde_json::Value> {
     let time = chrono::Utc::now();
+    let stats = ALLOCATOR.stats();
+
+    let current_heap_size_kb = stats
+        .bytes_allocated
+        .saturating_sub(stats.bytes_deallocated)
+        / 1024;
     serde_json::json!(
     {
         "status" : "healthy",
-        "current_time" : time.to_rfc3339()
+        "current_time" : time.to_rfc3339(),
+        "allocated_memory": current_heap_size_kb,
     })
     .into()
 }
