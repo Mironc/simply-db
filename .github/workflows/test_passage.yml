@@ -21,24 +21,10 @@ jobs:
       - name: Enable Rust Cache
         uses: Swatinem/rust-cache@v2
 
-      - name: Run tests
-        run: cargo test --workspace --all-targets
-  build-executables:
-    name: Test executable building
-    runs-on: ubuntu-latest
-    needs: run-tests
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Enable Rust Cache
-        uses: Swatinem/rust-cache@v2
-
-      - name: Test builds
+      - name: Build executables with features
         run: |
-            cargo build --bin server --features="server-deps"
-            cargo build --bin client --features="client-deps"
+          cargo build --bin server --features="server-deps"
+          cargo build --bin client --features="client-deps"
+
+      - name: Run tests
+        run: cargo test --workspace --all-targets --features="server-deps,client-deps"
