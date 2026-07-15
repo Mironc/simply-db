@@ -110,7 +110,7 @@ impl UpdateQuery {
 #[cfg(test)]
 mod test {
     use storage::{
-        common_types::{FieldType, Schema, SchemaValue},
+        common_types::{FieldModifier, FieldType, Schema, SchemaValue},
         db::Database,
         hashmap, scalar, scalar_type,
     };
@@ -129,7 +129,10 @@ mod test {
 
         // Create a table with one field
         let mut field_types = Vec::new();
-        field_types.push(("age".to_string(), FieldType::new(scalar_type!(Int), false)));
+        field_types.push((
+            "age".to_string(),
+            FieldType::new(scalar_type!(Int), vec![FieldModifier::NotNull]),
+        ));
         let schema = Schema::new(field_types);
 
         let create_table = CreateTable::new("table".to_string(), schema, false);

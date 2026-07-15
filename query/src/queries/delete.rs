@@ -160,15 +160,15 @@ mod tests {
         let mut field_types = Vec::new();
         field_types.push((
             "age".to_string(),
-            FieldType::new(DataType::Scalar(ScalarType::Int), false),
+            FieldType::new(DataType::Scalar(ScalarType::Int), vec![]),
         ));
         field_types.push((
             "name".to_string(),
-            FieldType::new(DataType::Scalar(ScalarType::Text), false),
+            FieldType::new(DataType::Scalar(ScalarType::Text), vec![]),
         ));
         field_types.push((
             "is_active".to_string(),
-            FieldType::new(DataType::Scalar(ScalarType::Bool), false),
+            FieldType::new(DataType::Scalar(ScalarType::Bool), vec![]),
         ));
         let schema = Schema::new(field_types);
         // Create table

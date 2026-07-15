@@ -6,7 +6,7 @@ pub enum CreateTableError {
     AlreadyExists,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct CreateTable {
     name: String,
     schema: Schema,
@@ -47,11 +47,11 @@ mod test {
         let mut fields = Vec::new();
         fields.push((
             "age".to_string(),
-            FieldType::new(DataType::Scalar(ScalarType::Int), false),
+            FieldType::new(DataType::Scalar(ScalarType::Int), vec![]),
         ));
         fields.push((
             "name".to_string(),
-            FieldType::new(DataType::Scalar(ScalarType::Text), false),
+            FieldType::new(DataType::Scalar(ScalarType::Text), vec![]),
         ));
         let row_type = Schema::new(fields);
         let mut db = Database::new();
@@ -64,11 +64,11 @@ mod test {
         let mut fields = Vec::new();
         fields.push((
             "age".to_string(),
-            FieldType::new(DataType::Scalar(ScalarType::Int), false),
+            FieldType::new(DataType::Scalar(ScalarType::Int), vec![]),
         ));
         fields.push((
             "name".to_string(),
-            FieldType::new(DataType::Scalar(ScalarType::Text), false),
+            FieldType::new(DataType::Scalar(ScalarType::Text), vec![]),
         ));
         let row_type = Schema::new(fields);
         let mut db = Database::new();

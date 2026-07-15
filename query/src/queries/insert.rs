@@ -1,10 +1,9 @@
-use storage::{common_types::SchemaValue, db::Database, row::Row, table::TableError};
+use storage::{common_types::SchemaValue, db::Database, row::Row, table::TableInsertError};
 
 #[cfg_attr(feature = "serialize", derive(serde::Serialize, serde::Deserialize))]
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum InsertError {
-    /// Type in table does not matches with type of table
-    TypeMismatch,
+    TableInsertError(TableInsertError),
     /// Database doesn't have requested table
     UnknownTable(String),
 }
@@ -19,14 +18,15 @@ impl InsertQuery {
     }
     pub fn execute(&self, db: &Database) -> Result<(), InsertError> {
         if let Some(table) = db.get_table(&self.table) {
-            for row_data in self.rows_data.iter() {
-                table
-                    .insert_row(Row::new(row_data.clone()))
-                    .map_err(|x| match x {
-                        TableError::SchemaMismatch => InsertError::TypeMismatch,
-                    })?;
-            }
-            Ok(())
+            table
+                .insert_rows(
+                    self.rows_data
+                        .iter()
+                        .cloned()
+                        .map(|x| Row::new(x))
+                        .collect(),
+                )
+                .map_err(|x| InsertError::TableInsertError(x))
         } else {
             Err(InsertError::UnknownTable(self.table.clone()))
         }
@@ -38,12 +38,17 @@ mod test {
 
     use storage::{
         common_types::{
-            DataType, DataValue, FieldType, ScalarType, ScalarValue, Schema, SchemaValue,
+            DataType, DataValue, FieldModifier, FieldType, ScalarType, ScalarValue, Schema,
+            SchemaValue,
         },
         db::Database,
+        table::TableInsertError,
     };
 
-    use crate::queries::{create_table::CreateTable, insert::InsertQuery};
+    use crate::queries::{
+        create_table::CreateTable,
+        insert::{InsertError, InsertQuery},
+    };
 
     #[test]
     fn unknown_table() {
@@ -73,7 +78,44 @@ mod test {
         create_table.execute(&mut db).unwrap();
 
         let insert = InsertQuery::new("table".to_string(), vec![type_value]);
-        assert!(insert.execute(&mut db).is_err());
+        assert_eq!(
+            insert.execute(&mut db),
+            Err(InsertError::TableInsertError(
+                TableInsertError::SchemaMismatch
+            ))
+        );
+    }
+    #[test]
+    fn unique_constraint() {
+        let mut data = HashMap::new();
+        data.insert("id".to_string(), DataValue::Scalar(ScalarValue::Int(30)));
+        let schema_value = SchemaValue::new(data);
+
+        let mut field_types = Vec::new();
+        field_types.push((
+            "id".to_string(),
+            FieldType::new(
+                DataType::Scalar(ScalarType::Int),
+                vec![FieldModifier::Unique],
+            ),
+        ));
+        let schema = Schema::new(field_types);
+        let mut db = Database::new();
+
+        // Creating table with empty type
+        let create_table = CreateTable::new("table".to_string(), schema, false);
+        create_table.execute(&mut db).unwrap();
+
+        let insert = InsertQuery::new(
+            "table".to_string(),
+            vec![schema_value.clone(), schema_value],
+        );
+        assert_eq!(
+            insert.execute(&mut db),
+            Err(InsertError::TableInsertError(
+                TableInsertError::UniqueConstraint
+            ))
+        );
     }
 
     #[test]
@@ -89,11 +131,11 @@ mod test {
         let mut field_types = Vec::new();
         field_types.push((
             "age".to_string(),
-            FieldType::new(DataType::Scalar(ScalarType::Int), false),
+            FieldType::new(DataType::Scalar(ScalarType::Int), vec![]),
         ));
         field_types.push((
             "name".to_string(),
-            FieldType::new(DataType::Scalar(ScalarType::Text), false),
+            FieldType::new(DataType::Scalar(ScalarType::Text), vec![]),
         ));
         let schema = Schema::new(field_types);
 

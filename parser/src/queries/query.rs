@@ -2,7 +2,6 @@ use std::collections::HashMap;
 
 use query::{
     Query,
-    expr::Expr,
     queries::{
         create_table::CreateTable,
         delete::{DeleteQuery, DeleteRows, DropTable, TruncateTable},
@@ -11,7 +10,9 @@ use query::{
         update::UpdateQuery,
     },
 };
-use storage::common_types::{DataType, DataValue, FieldType, ScalarType, Schema, SchemaValue};
+use storage::common_types::{
+    DataType, DataValue, FieldModifier, FieldType, ScalarType, Schema, SchemaValue,
+};
 
 use crate::{
     common::{ParseError, ParseResult, TokenWalker, parse_field_name, parse_literal},
@@ -185,15 +186,10 @@ pub(super) fn parse_create_fields<'a>(walker: &mut TokenWalker<'a, '_>) -> Parse
     }
     let mut fields = Vec::new();
     loop {
-        let field_parsed = parse_field_and_modifiers(walker)?;
+        let fields_parsed = parse_field_and_modifiers(walker)?;
         // TODO: FIELD MODIFIERS
-        let field = FieldType::new(
-            field_parsed.1,
-            !field_parsed.2.contains(&FieldModifier::NotNull)
-                && !field_parsed.2.contains(&FieldModifier::PrimaryKey)
-                && !field_parsed.2.contains(&FieldModifier::AutoIncrement),
-        );
-        fields.push((field_parsed.0, field));
+        let field = FieldType::new(fields_parsed.1, fields_parsed.2);
+        fields.push((fields_parsed.0, field));
         let token = walker.next().ok_or(ParseError::UnexpectedEof)?;
         if let TokenValue::Delimiter(Delimiter::RoundClose) = token {
             break;
@@ -232,15 +228,6 @@ pub(super) fn parse_field_and_modifiers<'a>(
     Ok((field_name, field_type, field_modifiers))
 }
 pub type FieldModifiers = Vec<FieldModifier>;
-#[derive(Debug, Clone, PartialEq)]
-pub enum FieldModifier {
-    PrimaryKey,
-    NotNull,
-    Default(DataValue),
-    AutoIncrement,
-    Unique,
-    Check(Expr),
-}
 /// Parses field modifier: PRIMARY KEY, UNIQUE, etc.
 pub(super) fn parse_field_modifier<'a>(
     walker: &mut TokenWalker<'a, '_>,

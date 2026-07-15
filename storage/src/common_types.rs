@@ -1,7 +1,9 @@
 use std::collections::HashMap;
 
+use crate::row::Row;
+
 #[cfg_attr(feature = "serialize", derive(serde::Serialize, serde::Deserialize))]
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Schema {
     fields: Vec<(String, FieldType)>,
 }
@@ -14,18 +16,50 @@ impl Schema {
         &self.fields
     }
 }
+
+pub trait RowCheckable: std::fmt::Debug {
+    fn check(&self, row: &Row) -> bool;
+}
+#[derive(Debug)]
+pub enum FieldModifier {
+    PrimaryKey,
+    NotNull,
+    Default(DataValue),
+    AutoIncrement,
+    Unique,
+    Check(Box<dyn RowCheckable>),
+}
 #[cfg_attr(feature = "serialize", derive(serde::Serialize, serde::Deserialize))]
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct FieldType {
     data_type: DataType,
     is_nullable: bool,
+    is_unique: bool,
+    //default: Option<DataValue>,
 }
 
 impl FieldType {
-    pub fn new(data_type: DataType, is_nullable: bool) -> Self {
+    pub fn new(data_type: DataType, modifiers: Vec<FieldModifier>) -> Self {
+        let default = modifiers.iter().find_map(|x| {
+            if let FieldModifier::Default(d) = x {
+                Some(d)
+            } else {
+                None
+            }
+        });
+        let is_unique = modifiers
+            .iter()
+            .any(|x| matches!(x, FieldModifier::Unique | FieldModifier::PrimaryKey));
+        let is_nullable = !modifiers.iter().any(|x| {
+            matches!(
+                x,
+                FieldModifier::NotNull | FieldModifier::Unique | FieldModifier::PrimaryKey
+            )
+        });
         Self {
             data_type,
             is_nullable,
+            is_unique,
         }
     }
 
@@ -35,6 +69,10 @@ impl FieldType {
 
     pub fn is_nullable(&self) -> bool {
         self.is_nullable
+    }
+
+    pub fn is_unique(&self) -> bool {
+        self.is_unique
     }
 }
 #[derive(Debug, Clone, PartialEq)]
@@ -55,12 +93,12 @@ impl SchemaValue {
     }
     pub fn validate(&self, schema: &Schema) -> bool {
         schema.fields.iter().all(|(field_name, field_type)| {
-            if field_type.is_nullable() {
-                return true;
-            }
             if let Some(data_type) = self.fields.get(field_name) {
                 data_type.validate(&field_type.data_type, field_type.is_nullable)
             } else {
+                if field_type.is_nullable() {
+                    return true;
+                }
                 false
             }
         }) && self
@@ -305,7 +343,7 @@ macro_rules! scalar_type {
 }
 #[cfg(test)]
 mod tests {
-    use crate as simply_db;
+    use crate::{self as simply_db, common_types::FieldModifier};
     use simply_db::common_types::{
         DataType, DataValue, FieldType, ScalarType, ScalarValue, Schema, SchemaValue,
     };
@@ -369,7 +407,7 @@ mod tests {
         let mut schema_fields = Vec::new();
         schema_fields.push((
             "name".to_string(),
-            FieldType::new(DataType::Scalar(ScalarType::Text), false),
+            FieldType::new(DataType::Scalar(ScalarType::Text), vec![]),
         ));
 
         let schema = Schema::new(schema_fields);
@@ -401,7 +439,7 @@ mod tests {
         let mut schema_fields = Vec::new();
         schema_fields.push((
             "name".to_string(),
-            FieldType::new(DataType::Scalar(ScalarType::Text), true),
+            FieldType::new(DataType::Scalar(ScalarType::Text), vec![]),
         ));
 
         let schema = Schema::new(schema_fields);
@@ -434,7 +472,7 @@ mod tests {
         let mut schema_fields = Vec::new();
         schema_fields.push((
             "name".to_string(),
-            FieldType::new(DataType::Scalar(ScalarType::Text), false),
+            FieldType::new(DataType::Scalar(ScalarType::Text), vec![]),
         ));
 
         let schema = Schema::new(schema_fields);
@@ -454,7 +492,7 @@ mod tests {
         let mut schema_fields = Vec::new();
         schema_fields.push((
             "name".to_string(),
-            FieldType::new(DataType::Scalar(ScalarType::Text), false),
+            FieldType::new(DataType::Scalar(ScalarType::Text), vec![]),
         ));
 
         let schema = Schema::new(schema_fields);
@@ -484,7 +522,10 @@ mod tests {
         let mut schema_fields = Vec::new();
         schema_fields.push((
             "name".to_string(),
-            FieldType::new(DataType::Scalar(ScalarType::Text), true),
+            FieldType::new(
+                DataType::Scalar(ScalarType::Text),
+                vec![FieldModifier::NotNull],
+            ),
         ));
 
         let schema = Schema::new(schema_fields);
@@ -510,7 +551,7 @@ mod tests {
         let mut schema_fields = Vec::new();
         schema_fields.push((
             "name".to_string(),
-            FieldType::new(DataType::Scalar(ScalarType::Text), false),
+            FieldType::new(DataType::Scalar(ScalarType::Text), vec![]),
         ));
 
         let schema = Schema::new(schema_fields);

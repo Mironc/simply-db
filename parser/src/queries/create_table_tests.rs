@@ -1,6 +1,6 @@
 use query::{Query, queries::create_table::CreateTable};
 use storage::{
-    common_types::{FieldType, Schema},
+    common_types::{FieldModifier, FieldType, Schema},
     scalar_type,
 };
 
@@ -20,8 +20,14 @@ fn create_table_success() {
     let query = parse_create_query(walker);
 
     let mut row_type = Vec::new();
-    row_type.push(("id".to_owned(), FieldType::new(scalar_type!(Int), false)));
-    row_type.push(("name".to_owned(), FieldType::new(scalar_type!(Text), false)));
+    row_type.push((
+        "id".to_owned(),
+        FieldType::new(scalar_type!(Int), vec![FieldModifier::PrimaryKey]),
+    ));
+    row_type.push((
+        "name".to_owned(),
+        FieldType::new(scalar_type!(Text), vec![FieldModifier::NotNull]),
+    ));
     let cmp_query = CreateTable::new("users".to_owned(), Schema::new(row_type), true);
 
     assert_eq!(query, Ok(Query::CreateTable(cmp_query)))
@@ -34,8 +40,14 @@ fn create_table_no_modifiers() {
     let query = parse_create_query(walker);
 
     let mut row_type = Vec::new();
-    row_type.push(("id".to_owned(), FieldType::new(scalar_type!(Int), true)));
-    row_type.push(("name".to_owned(), FieldType::new(scalar_type!(Text), true)));
+    row_type.push((
+        "id".to_owned(),
+        FieldType::new(scalar_type!(Int), Vec::new()),
+    ));
+    row_type.push((
+        "name".to_owned(),
+        FieldType::new(scalar_type!(Text), Vec::new()),
+    ));
     let cmp_query = CreateTable::new("users".to_owned(), Schema::new(row_type), true);
 
     assert_eq!(query, Ok(Query::CreateTable(cmp_query)))
