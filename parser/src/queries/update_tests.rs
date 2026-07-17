@@ -102,41 +102,7 @@ fn missing_set_clause() {
     }
 }
 
-// 6. Test on error: Invalid token after SET (should be comma or WHERE)
-// skipped for now as I'am no sure how to implement this check, as invalid counts as part of set expr
-// #[test]
-// fn invalid_token_after_set() {
-//     let tokens = tokenize("UPDATE users SET age=25 invalid");
-//     let walker = TokenWalker::new(&tokens);
-
-//     let res = parse_update_query(walker);
-//     assert!(res.is_err());
-//     println!("{:?}", res);
-//     if let Err(ParseError::UnexpectedSymbol { expected, .. }) = res {
-//         assert!(expected.contains("valid table name"));
-//     } else {
-//         panic!("Expected error for invalid token after SET");
-//     }
-// }
-
-// 7. Test on error: Invalid token in WHERE clause (should be expression)
-// as for now skipped
-// #[test]
-// fn invalid_where_expression() {
-//     let tokens = tokenize("UPDATE users SET age=25 WHERE 123");
-//     let walker = TokenWalker::new(&tokens);
-
-//     let res = parse_update_query(walker);
-//     assert!(res.is_err());
-//     if let Err(ParseError::UnexpectedSymbol { expected, given }) = res {
-//         println!("{} {}", expected, given);
-//         assert!(expected.contains("valid field name"));
-//     } else {
-//         panic!("Expected error for invalid WHERE expression");
-//     }
-// }
-
-// 8. Test on error: Invalid field name in SET clause (should be identifier)
+// 6. Test on error: Invalid field name in SET clause (should be identifier)
 #[test]
 fn invalid_field_name() {
     let tokens = tokenize("UPDATE users SET 123age=25").unwrap();
