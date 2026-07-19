@@ -1,4 +1,7 @@
-use std::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
+use std::{
+    collections::HashSet,
+    sync::{RwLock, RwLockReadGuard, RwLockWriteGuard},
+};
 
 use crate::{common_types::Schema, row::Row};
 
@@ -80,6 +83,14 @@ impl Table {
 
     pub fn schema(&self) -> &Schema {
         &self.schema
+    }
+}
+impl Clone for Table {
+    fn clone(&self) -> Self {
+        Self {
+            rows: RwLock::new(self.rows().clone()),
+            schema: self.schema.clone(),
+        }
     }
 }
 #[cfg_attr(feature = "serialize", derive(serde::Serialize, serde::Deserialize))]

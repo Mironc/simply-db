@@ -12,6 +12,7 @@ members = ["net", "parser/", "query/", "storage/"]
 axum = { version = "0.8", default-features = false, features = ["http1", "json", "macros", "tokio"] }
 boa_engine = { version = "0.21.1" }
 criterion = { version = "0.5.1", features = ["html_reports"] }
+csv = "1.4.0"
 rstest = { version = "0.26.1" }
 serde = { version = "1.0.219", features = ["serde_derive"] }
 
@@ -46,7 +47,7 @@ tokio = { version = "1.0", features = ["rt-multi-thread"], optional = true }
 [dev-dependencies]
 # We need those for integration tests
 reqwest = { version = "0.11", features = ["json"] }
-tokio = { version = "1.0", features = ["rt-multi-thread", "macros"]}
+tokio = { version = "1.0", features = ["macros", "rt-multi-thread"] }
 
 [features]
 # default = ["client-deps", "server-deps"]

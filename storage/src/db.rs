@@ -1,6 +1,7 @@
 //! Contains `Database` structure
 use std::{
     collections::HashMap,
+    ops::Deref,
     sync::{Arc, RwLock, RwLockReadGuard},
 };
 
@@ -37,5 +38,12 @@ impl Database {
     }
     pub fn has_table(&self, name: &str) -> bool {
         self.tables().contains_key(name)
+    }
+}
+impl Clone for Database {
+    fn clone(&self) -> Self {
+        Self {
+            tables: RwLock::new(self.tables().deref().clone()),
+        }
     }
 }

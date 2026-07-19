@@ -3,12 +3,27 @@ name = "query"
 version = "0.1.0"
 edition = "2024"
 
+[[bench]]
+harness = false
+name = "0_insert"
+
+[[bench]]
+harness = false
+name = "1_select"
+
+[[bench]]
+harness = false
+name = "2_update"
+
 [dependencies]
 serde = { workspace = true, optional = true }
 storage = { path = "../storage" }
 
 [dev-dependencies]
+criterion = { workspace = true }
+csv = { workspace = true }
 rstest = { workspace = true }
+serde = { workspace = true }
 
 [features]
 serialize = ["serde"]
