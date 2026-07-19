@@ -28,3 +28,6 @@ jobs:
 
       - name: Run tests
         run: cargo test --workspace --all-targets --features="server-deps,client-deps"
+
+      - name: Run benchmarks
+        run: cargo bench --workspace
