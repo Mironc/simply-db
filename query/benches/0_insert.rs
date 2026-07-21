@@ -1,66 +1,11 @@
+mod setup;
 use std::panic;
 
 use criterion::{BatchSize, Criterion, Throughput, criterion_group, criterion_main};
 use query::queries::insert::InsertQuery;
-use storage::{
-    common_types::{FieldModifier, FieldType, Schema, SchemaValue},
-    db::Database,
-    hashmap, scalar, scalar_type,
-    table::Table,
-};
-#[derive(Debug, serde::Serialize, serde::Deserialize)]
-struct Record {
-    id: i32,
-    name: String,
-    email: String,
-}
-impl Record {
-    pub fn into_schema_value(&self) -> SchemaValue {
-        SchemaValue::new(hashmap!(
-            "id".to_owned() => scalar!(Int(self.id)),
-            "name".to_owned() => scalar!(Text(self.name.clone())),
-            "email".to_owned() => scalar!(Text(self.email.clone()))
-        ))
-    }
-}
-fn read_records() -> Vec<Record> {
-    let data = include_str!("MOCK_DATA.csv");
-    csv::Reader::from_reader(data.as_bytes())
-        .into_deserialize::<Record>()
-        .filter_map(|x| if let Ok(x) = x { Some(x) } else { None })
-        .collect::<Vec<Record>>()
-}
-fn init_db() -> Database {
-    let db = Database::new();
-    let field_id = FieldType::new(scalar_type!(Int), vec![FieldModifier::NotNull]);
-    let field_name = FieldType::new(scalar_type!(Text), vec![FieldModifier::NotNull]);
-    let field_email = FieldType::new(scalar_type!(Text), vec![FieldModifier::NotNull]);
-    let schema = Schema::new(vec![
-        ("id".to_owned(), field_id),
-        ("name".to_owned(), field_name),
-        ("email".to_owned(), field_email),
-    ]);
-    let table = Table::new(schema);
-    db.insert_table("users".to_owned(), table).unwrap();
-    db
-}
-fn init_db_unique() -> Database {
-    let db = Database::new();
-    let field_id = FieldType::new(
-        scalar_type!(Int),
-        vec![FieldModifier::NotNull, FieldModifier::Unique],
-    );
-    let field_name = FieldType::new(scalar_type!(Text), vec![FieldModifier::NotNull]);
-    let field_email = FieldType::new(scalar_type!(Text), vec![FieldModifier::NotNull]);
-    let schema = Schema::new(vec![
-        ("id".to_owned(), field_id),
-        ("name".to_owned(), field_name),
-        ("email".to_owned(), field_email),
-    ]);
-    let table = Table::new(schema);
-    db.insert_table("users".to_owned(), table).unwrap();
-    db
-}
+use storage::db::Database;
+
+use crate::setup::{Record, init_db, init_db_unique, read_records};
 
 fn insert_by_one(db: &mut Database, records: &[Record]) {
     for record in records {
