@@ -1,3 +1,5 @@
+mod formatter;
+use crate::formatter::WallTimeQps;
 use criterion::{BatchSize, Criterion, criterion_group, criterion_main};
 use query::{
     expr::{Expr, LiteralValue},
@@ -12,6 +14,8 @@ use storage::{
     hashmap, scalar, scalar_type,
     table::Table,
 };
+
+use crate::formatter::WallTimeQps;
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 struct Record {
     id: i32,
@@ -66,15 +70,20 @@ fn update_rows(db: &mut Database) -> Result<(), UpdateError> {
     );
     query.execute(db)
 }
-fn criterion_benchmark(c: &mut Criterion) {
+fn criterion_benchmark(c: &mut Criterion<WallTimeQps>) {
     let records = read_records();
     let db = init_db();
     insert_multiple(&db, &records);
-
-    c.bench_function("update", |b| {
+    let mut group = c.benchmark_group("update");
+    group.bench_function("update", |b| {
         b.iter_batched_ref(|| db.clone(), |db| update_rows(db), BatchSize::LargeInput);
     });
+    group.finish();
 }
 
-criterion_group!(benches, criterion_benchmark);
+criterion_group! {
+    name = benches;
+    config = Criterion::default().with_measurement(WallTimeQps);
+    targets = criterion_benchmark
+}
 criterion_main!(benches);
