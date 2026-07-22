@@ -2,7 +2,11 @@ use std::collections::HashMap;
 
 use crate::row::Row;
 
-#[cfg_attr(feature = "serialize", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(
+    feature = "serialize",
+    derive(serde::Serialize, serde::Deserialize),
+    serde(rename_all = "camelCase")
+)]
 #[derive(Debug, Clone, PartialEq)]
 pub struct Schema {
     fields: Vec<(String, FieldType)>,
@@ -29,7 +33,11 @@ pub enum FieldModifier {
     Unique,
     Check(Box<dyn RowCheckable>),
 }
-#[cfg_attr(feature = "serialize", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(
+    feature = "serialize",
+    derive(serde::Serialize, serde::Deserialize),
+    serde(rename_all = "camelCase")
+)]
 #[derive(Debug, Clone, PartialEq)]
 pub struct FieldType {
     data_type: DataType,
@@ -107,7 +115,11 @@ impl SchemaValue {
             .all(|(field_name, _)| schema.fields.iter().any(|x| &x.0 == field_name))
     }
 }
-#[cfg_attr(feature = "serialize", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(
+    feature = "serialize",
+    derive(serde::Serialize, serde::Deserialize),
+    serde(rename_all = "camelCase")
+)]
 #[derive(Debug, Clone, PartialEq)]
 pub enum DataValue {
     Scalar(ScalarValue),
@@ -154,19 +166,11 @@ impl std::fmt::Display for DataValue {
         }
     }
 }
-// impl serde::Serialize for DataValue {
-//     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-//     where
-//         S: serde::Serializer,
-//     {
-//         match self {
-//             DataValue::Scalar(scalar_value) => ,
-//             DataValue::Struct(hash_map) => todo!(),// holding it for future
-//             DataValue::Null => todo!(),
-//         }
-//     }
-// }
-#[cfg_attr(feature = "serialize", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(
+    feature = "serialize",
+    derive(serde::Serialize, serde::Deserialize),
+    serde(rename_all = "camelCase")
+)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DataType {
     Scalar(ScalarType),
@@ -177,7 +181,11 @@ impl DataType {
         Self::Struct(struct_data)
     }
 }
-#[cfg_attr(feature = "serialize", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(
+    feature = "serialize",
+    derive(serde::Serialize, serde::Deserialize),
+    serde(rename_all = "camelCase")
+)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ScalarType {
     Int,
@@ -197,7 +205,12 @@ impl ScalarType {
     }
 }
 
-#[cfg_attr(feature = "serialize", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(
+    feature = "serialize",
+    derive(serde::Serialize, serde::Deserialize),
+    serde(rename_all = "camelCase"),
+    serde(tag = "type", content = "payload")
+)]
 #[derive(Debug, Clone, PartialEq)]
 pub enum ScalarValue {
     Int(i32),

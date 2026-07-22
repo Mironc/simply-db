@@ -93,7 +93,11 @@ impl Clone for Table {
         }
     }
 }
-#[cfg_attr(feature = "serialize", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(
+    feature = "serialize",
+    derive(serde::Serialize, serde::Deserialize),
+    serde(rename_all = "camelCase")
+)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TableInsertError {
     /// Schema in table doesn't match with inserted row

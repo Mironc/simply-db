@@ -9,6 +9,7 @@ use storage::common_types::Schema;
 ///
 /// Contains data about schemas inside database tables
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Overview {
     schemas: HashMap<String, Schema>,
 }
@@ -24,11 +25,13 @@ impl Overview {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub enum DatabaseState {
     Healthy,
     Degraded,
 }
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct MemoryMetrics {
     current_heap_size: usize,
 }
@@ -46,6 +49,7 @@ impl MemoryMetrics {
 ///
 /// Contains general information about database state.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Health {
     /// Current database state
     state: DatabaseState,
@@ -76,6 +80,7 @@ impl Health {
 ///
 /// Contains execution results.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SqlQueryOutput {
     output: Vec<Result<QueryOutput, QueryError>>,
 }
@@ -91,6 +96,8 @@ impl SqlQueryOutput {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[serde(tag = "type", content = "payload")]
 pub enum ParseErrorDTO {
     UnknownInstruction,
     UnclosedBracket(char),
@@ -157,6 +164,8 @@ impl From<ParseError<'_>> for ParseErrorDTO {
     }
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[serde(tag = "type", content = "payload")]
 pub enum ExpectExprErrDTO {
     Before { symbol: String },
     After { symbol: String },

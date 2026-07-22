@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 ///
 /// Contains single or multiple SQL queries at once.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SqlQueryRequest {
     sql: String,
 }
