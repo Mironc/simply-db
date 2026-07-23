@@ -1,12 +1,14 @@
 use std::borrow::Cow;
 
 use storage::{
-    common_types::{DataValue, ScalarValue, Schema},
+    common_types::{DataValue, ScalarValue},
     db::Database,
-    row::Row,
 };
 
-use crate::expr::{Expr, ExprError};
+use crate::{
+    context::Context,
+    expr::{Expr, ExprError},
+};
 
 #[cfg_attr(feature = "serialize", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, PartialEq)]
@@ -30,20 +32,19 @@ pub enum Projection {
 }
 
 impl Projection {
-    pub fn execute(&self, row: &Row, schema: &Schema) -> Result<Vec<DataValue>, ExprError> {
+    pub fn execute(&self, context: &Context) -> Result<Vec<DataValue>, ExprError> {
         Ok(match self {
             Projection::Row => {
-                let row_data = row.data().fields();
-                schema
-                    .fields()
-                    .iter()
-                    .map(|x| row_data.iter().find(|y| x.0 == *y.0).unwrap().1.clone()) // Ordering by fields
-                    .collect::<Vec<DataValue>>()
+                if let Some(fields) = context.fields() {
+                    fields.clone()
+                } else {
+                    Vec::new()
+                }
             }
             Projection::Expr(exprs) => {
                 let mut res = Vec::new();
                 for expr in exprs.iter() {
-                    let value = expr.execute(row)?;
+                    let value = expr.execute(context)?;
                     match value {
                         Cow::Borrowed(b) => res.push(b.clone()),
                         Cow::Owned(o) => res.push(o),
@@ -76,18 +77,19 @@ impl SelectQuery {
         })?;
         let mut projected = Vec::new();
         for row in table.rows().iter() {
+            let context = Context::new(row.data(), table.schema());
             if let Some(filter) = &self.filter_expr {
-                match *filter.execute(row)? {
+                match *filter.execute(&context)? {
                     DataValue::Scalar(ScalarValue::Bool(val)) => {
                         if val {
-                            projected.push(self.projection.execute(row, table.schema())?);
+                            projected.push(self.projection.execute(&context)?);
                         }
                     }
                     DataValue::Null => continue,
                     _ => return Err(SelectError::BadExpr),
                 }
             } else {
-                projected.push(self.projection.execute(row, table.schema())?);
+                projected.push(self.projection.execute(&context)?);
             }
         }
         Ok(projected)

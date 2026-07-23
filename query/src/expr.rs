@@ -1,9 +1,8 @@
 use std::{borrow::Cow, ops::Deref};
 
-use storage::{
-    common_types::{DataValue, ScalarValue},
-    row::Row,
-};
+use storage::common_types::{DataValue, ScalarValue};
+
+use crate::context::Context;
 
 #[cfg_attr(feature = "serialize", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -40,7 +39,6 @@ impl LiteralValue {
                 ScalarValue::Bool(b) => Self::Bool(b),
                 ScalarValue::Text(t) => Self::Text(t),
             }),
-            DataValue::Struct(_) => None,
             DataValue::Null => Some(Self::Null),
         }
     }
@@ -52,11 +50,11 @@ pub enum LogicOp {
     Not(Expr),
 }
 impl LogicOp {
-    pub fn execute<'a>(&'a self, row: &Row) -> Result<Cow<'a, DataValue>, ExprError> {
+    pub fn execute<'a>(&'a self, context: &Context<'a>) -> Result<Cow<'a, DataValue>, ExprError> {
         match self {
             LogicOp::And(op, op1) => {
-                let left = op.execute(row)?;
-                let right = op1.execute(row)?;
+                let left = op.execute(context)?;
+                let right = op1.execute(context)?;
                 if let (
                     DataValue::Scalar(ScalarValue::Bool(l)),
                     DataValue::Scalar(ScalarValue::Bool(r)),
@@ -69,8 +67,8 @@ impl LogicOp {
                 }
             }
             LogicOp::Or(op, op1) => {
-                let left = op.execute(row)?;
-                let right = op1.execute(row)?;
+                let left = op.execute(context)?;
+                let right = op1.execute(context)?;
                 if let (
                     DataValue::Scalar(ScalarValue::Bool(l)),
                     DataValue::Scalar(ScalarValue::Bool(r)),
@@ -83,7 +81,7 @@ impl LogicOp {
                 }
             }
             LogicOp::Not(op) => {
-                let val = op.execute(row)?;
+                let val = op.execute(context)?;
                 if let DataValue::Scalar(ScalarValue::Bool(val)) = val.deref() {
                     let value = DataValue::Scalar(ScalarValue::Bool(!val));
                     return Ok(Cow::Owned(value));
@@ -103,10 +101,10 @@ pub enum ComparisonOp {
     NotEq(Expr, Expr),
 }
 impl ComparisonOp {
-    pub fn execute<'a>(&'a self, row: &'a Row) -> Result<Cow<'a, DataValue>, ExprError> {
+    pub fn execute<'a>(&'a self, context: &Context<'a>) -> Result<Cow<'a, DataValue>, ExprError> {
         let (left, right) = self.exprs();
-        let left = left.execute(row)?;
-        let right = right.execute(row)?;
+        let left = left.execute(context)?;
+        let right = right.execute(context)?;
         if let (DataValue::Scalar(ScalarValue::Bool(l)), DataValue::Scalar(ScalarValue::Bool(r))) =
             (left.deref(), right.deref())
         {
@@ -200,11 +198,9 @@ pub enum ArithmeticOp {
 }
 
 impl ArithmeticOp {
-    pub fn execute<'a>(&'a self, row: &'a Row) -> Result<Cow<'a, DataValue>, ExprError> {
+    pub fn execute<'a>(&'a self, context: &'a Context) -> Result<Cow<'a, DataValue>, ExprError> {
         let (lhs, rhs) = self.exprs();
-        match (lhs.execute(row)?.deref(), rhs.execute(row)?.deref()) {
-            (DataValue::Struct(_), _) => Err(ExprError::NotApplicable),
-            (_, DataValue::Struct(_)) => Err(ExprError::NotApplicable),
+        match (lhs.execute(context)?.deref(), rhs.execute(context)?.deref()) {
             (DataValue::Scalar(rhs), DataValue::Scalar(lhs)) => Ok(Cow::Owned(DataValue::Scalar(
                 match self {
                     ArithmeticOp::Add(_, _) => ScalarValue::add(rhs, lhs),
@@ -237,33 +233,35 @@ pub enum Expr {
     Arithmetic(Box<ArithmeticOp>),
 }
 impl Expr {
-    pub fn execute<'a>(&'a self, row: &'a Row) -> Result<Cow<'a, DataValue>, ExprError> {
+    pub fn execute<'a>(
+        &'a self,
+        context: &'a Context<'a>,
+    ) -> Result<Cow<'a, DataValue>, ExprError> {
         Ok(match self {
-            Expr::Field(field_name) => {
-                Cow::Borrowed(row.data().fields().get(field_name.as_str()).ok_or(
-                    ExprError::UnknownField {
-                        field: field_name.to_owned(),
-                    },
-                )?)
-            }
-            Expr::Logical(logical_op) => logical_op.execute(row)?,
-            Expr::Comparison(comparison_op) => comparison_op.execute(row)?,
+            Expr::Field(field_name) => Cow::Borrowed(context.get_field(field_name).ok_or(
+                ExprError::UnknownField {
+                    field: field_name.to_owned(),
+                },
+            )?),
+            Expr::Logical(logical_op) => logical_op.execute(context)?,
+            Expr::Comparison(comparison_op) => comparison_op.execute(context)?,
             Expr::Literal(literal_value) => Cow::Owned(literal_value.value()),
-            Expr::Arithmetic(operator) => operator.execute(row)?,
+            Expr::Arithmetic(operator) => operator.execute(context)?,
         })
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashMap;
+    use storage::scalar;
 
-    use storage::{common_types::SchemaValue, row::Row, scalar};
+    use crate::{
+        context::Context,
+        expr::{ArithmeticOp, ComparisonOp, Expr, ExprError, LiteralValue, LogicOp},
+    };
 
-    use crate::expr::{ArithmeticOp, ComparisonOp, Expr, ExprError, LiteralValue, LogicOp};
-
-    fn empty_row() -> Row {
-        Row::new(SchemaValue::new(HashMap::new()))
+    fn empty_context() -> Context<'static> {
+        Context::default()
     }
     /// Makes tests cleaner by removing boilerplate
     macro_rules! eq_assert {
@@ -321,7 +319,7 @@ mod tests {
             ArOp::Mul => lhs * rhs,
             ArOp::Div => lhs / rhs,
         }));
-        eq_assert!(expr.execute(&empty_row()), cmp);
+        eq_assert!(expr.execute(&empty_context()), cmp);
     }
     #[rstest::rstest]
     fn float_arithmetics(
@@ -345,7 +343,7 @@ mod tests {
             ArOp::Mul => lhs * rhs,
             ArOp::Div => lhs / rhs,
         }));
-        eq_assert!(expr.execute(&empty_row()), cmp);
+        eq_assert!(expr.execute(&empty_context()), cmp);
     }
     #[rstest::rstest]
     fn text_arithmetics_notapplicable(
@@ -362,7 +360,10 @@ mod tests {
             ArOp::Mul => ArithmeticOp::Multiply(literal_lhs, literal_rhs),
             ArOp::Div => ArithmeticOp::Divide(literal_lhs, literal_rhs),
         }));
-        assert_eq!(expr.execute(&empty_row()), Err(ExprError::NotApplicable));
+        assert_eq!(
+            expr.execute(&empty_context()),
+            Err(ExprError::NotApplicable)
+        );
     }
     enum CmpOp {
         Less,
@@ -404,7 +405,7 @@ mod tests {
             CmpOp::GreaterEq => lhs >= rhs,
             CmpOp::Greater => lhs > rhs,
         }));
-        eq_assert!(expr.execute(&empty_row()), cmp);
+        eq_assert!(expr.execute(&empty_context()), cmp);
     }
 
     #[rstest::rstest]
@@ -439,7 +440,7 @@ mod tests {
             CmpOp::GreaterEq => lhs >= rhs,
             CmpOp::Greater => lhs > rhs,
         }));
-        eq_assert!(expr.execute(&empty_row()), cmp);
+        eq_assert!(expr.execute(&empty_context()), cmp);
     }
     #[rstest::rstest]
     fn float_comparison(
@@ -473,7 +474,7 @@ mod tests {
             CmpOp::GreaterEq => lhs >= rhs,
             CmpOp::Greater => lhs > rhs,
         }));
-        eq_assert!(expr.execute(&empty_row()), cmp);
+        eq_assert!(expr.execute(&empty_context()), cmp);
     }
     enum LogOp {
         Or,
@@ -495,18 +496,18 @@ mod tests {
             LogOp::Or => lhs || rhs,
             LogOp::And => lhs && rhs,
         }));
-        eq_assert!(expr.execute(&empty_row()), cmp);
+        eq_assert!(expr.execute(&empty_context()), cmp);
     }
     #[test]
     fn logical_not() {
         let literal = Expr::Literal(LiteralValue::Bool(true));
         let expr = Expr::Logical(Box::new(LogicOp::Not(literal)));
         let cmp = scalar!(Bool(false));
-        eq_assert!(expr.execute(&empty_row()), cmp);
+        eq_assert!(expr.execute(&empty_context()), cmp);
 
         let literal = Expr::Literal(LiteralValue::Bool(false));
         let expr = Expr::Logical(Box::new(LogicOp::Not(literal)));
         let cmp = scalar!(Bool(true));
-        eq_assert!(expr.execute(&empty_row()), cmp);
+        eq_assert!(expr.execute(&empty_context()), cmp);
     }
 }

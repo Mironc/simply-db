@@ -23,6 +23,7 @@ name = "0_bench_cmp"
 foldhash = "0.2.0"
 query = { path = "../query/" }
 storage = { path = "../storage/" }
+structures = { path = "../structures/" }
 
 [dev-dependencies]
 boa_engine = { workspace = true }

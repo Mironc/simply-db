@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use query::{
     Query,
     queries::{
@@ -10,9 +8,12 @@ use query::{
         update::UpdateQuery,
     },
 };
-use storage::common_types::{
-    DataType, DataValue, FieldModifier, FieldType, ScalarType, Schema, SchemaValue,
+use storage::{
+    common_types::{DataValue, ScalarType},
+    row::Row,
+    schema::{FieldModifier, FieldType, Schema},
 };
+use structures::VecMap;
 
 use crate::{
     common::{ParseError, ParseResult, TokenWalker, parse_field_name, parse_literal},
@@ -184,12 +185,12 @@ pub(super) fn parse_create_fields<'a>(walker: &mut TokenWalker<'a, '_>) -> Parse
             given: token.as_str(),
         });
     }
-    let mut fields = Vec::new();
+    let mut fields = VecMap::new();
     loop {
         let fields_parsed = parse_field_and_modifiers(walker)?;
         // TODO: FIELD MODIFIERS
         let field = FieldType::new(fields_parsed.1, fields_parsed.2);
-        fields.push((fields_parsed.0, field));
+        fields.insert(fields_parsed.0, field);
         let token = walker.next().ok_or(ParseError::UnexpectedEof)?;
         if let TokenValue::Delimiter(Delimiter::RoundClose) = token {
             break;
@@ -206,12 +207,12 @@ pub(super) fn parse_create_fields<'a>(walker: &mut TokenWalker<'a, '_>) -> Parse
 }
 pub(super) fn parse_field_and_modifiers<'a>(
     walker: &mut TokenWalker<'a, '_>,
-) -> ParseResult<'a, (String, DataType, FieldModifiers)> {
+) -> ParseResult<'a, (String, ScalarType, FieldModifiers)> {
     let field_name = parse_field_name(walker)?;
     let field_type = {
         let field_type_token = walker.next().ok_or(ParseError::UnexpectedEof)?;
         if let Some(field_type) = ScalarType::from_str(&field_type_token.to_string()) {
-            DataType::Scalar(field_type)
+            field_type
         } else {
             return Err(ParseError::Other {
                 message: "Expected field type",
@@ -283,17 +284,21 @@ pub(super) fn parse_insert_query<'a>(mut walker: TokenWalker<'a, '_>) -> ParseRe
                 provided: data.len(),
             });
         }
-        let mut map = HashMap::new();
+        let mut map = Vec::new();
         for i in 0..fields.len() {
-            map.insert(fields[i].clone(), data[i].clone());
+            map.push(data[i].clone());
         }
-        let type_value = SchemaValue::new(map);
+        let type_value = Row::new(map);
         insert_data.push(type_value);
         if walker.next() != Some(&TokenValue::Delimiter(Delimiter::Comma)) {
             break;
         }
     }
-    Ok(Query::Insert(InsertQuery::new(table_name, insert_data)))
+    Ok(Query::Insert(InsertQuery::new(
+        table_name,
+        fields,
+        insert_data,
+    )))
 }
 /// Parses field names in INSERT statement
 pub(super) fn parse_insert_fields<'a>(

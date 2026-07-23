@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::fmt;
 use std::ops::Deref;
 // Helper macro to parse a string cleanly in tests
@@ -9,8 +8,8 @@ macro_rules! parse {
         parse_expr(&mut walker, tokens.len())
     }};
 }
-fn null_row() -> Row {
-    Row::new(SchemaValue::new(HashMap::default()))
+fn null_context() -> Context<'static> {
+    Context::default()
 }
 #[test]
 fn arithmetic() {
@@ -19,9 +18,10 @@ fn arithmetic() {
         parse_expr(&mut TokenWalker::new(&tokens), tokens.len())
     };
 
-    let expected = DataValue::Scalar(ScalarValue::Int(8));
+    let expected = scalar!(Int(8));
+
     assert_eq!(
-        expr.unwrap().execute(&null_row()).unwrap().deref(),
+        expr.unwrap().execute(&null_context()).unwrap().deref(),
         &expected
     );
 }
@@ -30,9 +30,9 @@ fn arithmetic() {
 fn arithmetic_precedence() {
     let expr = parse!("2+(5+3)*4+3");
 
-    let expected = DataValue::Scalar(ScalarValue::Int(37));
+    let expected = scalar!(Int(37));
     assert_eq!(
-        expr.unwrap().execute(&null_row()).unwrap().deref(),
+        expr.unwrap().execute(&null_context()).unwrap().deref(),
         &expected
     );
 }
@@ -41,10 +41,10 @@ fn arithmetic_precedence() {
 fn arithmetic_with_parentheses() {
     let expr = parse!("(5 + 3) * 4");
 
-    let expected = DataValue::Scalar(ScalarValue::Int(32));
+    let expected = scalar!(Int(32));
     println!("{:?}", expr);
     assert_eq!(
-        expr.unwrap().execute(&null_row()).unwrap().deref(),
+        expr.unwrap().execute(&null_context()).unwrap().deref(),
         &expected
     );
 }
@@ -53,9 +53,9 @@ fn arithmetic_with_parentheses() {
 fn boolean_operations() {
     let expr = parse!("NOT TRUE");
 
-    let expected = DataValue::Scalar(ScalarValue::Bool(false));
+    let expected = scalar!(Bool(false));
     assert_eq!(
-        expr.unwrap().execute(&null_row()).unwrap().deref(),
+        expr.unwrap().execute(&null_context()).unwrap().deref(),
         &expected
     );
 }
@@ -64,9 +64,9 @@ fn boolean_operations() {
 fn boolean_and() {
     let expr = parse!(" TRUE AND  TRUE ");
 
-    let expected = DataValue::Scalar(ScalarValue::Bool(true));
+    let expected = scalar!(Bool(true));
     assert_eq!(
-        expr.unwrap().execute(&null_row()).unwrap().deref(),
+        expr.unwrap().execute(&null_context()).unwrap().deref(),
         &expected
     );
 }
@@ -75,9 +75,9 @@ fn boolean_and() {
 fn boolean_or() {
     let expr = parse!("TRUE OR FALSE");
 
-    let expected = DataValue::Scalar(ScalarValue::Bool(true));
+    let expected = scalar!(Bool(true));
     assert_eq!(
-        expr.unwrap().execute(&null_row()).unwrap().deref(),
+        expr.unwrap().execute(&null_context()).unwrap().deref(),
         &expected
     );
 }
@@ -86,20 +86,21 @@ fn boolean_or() {
 fn field_references() {
     let expr = parse!("id");
 
-    let expected = DataValue::Scalar(ScalarValue::Int(1));
-    let mut row_data = HashMap::new();
-    row_data.insert("id".to_string(), DataValue::Scalar(ScalarValue::Int(1)));
-    let row = Row::new(SchemaValue::new(row_data));
-    assert_eq!(expr.unwrap().execute(&row).unwrap().deref(), &expected);
+    let expected = scalar!(Int(1));
+    let fields = vec![scalar!(Int(1))];
+    let schema =
+        Schema::new(vec![("id".to_owned(), FieldType::new(ScalarType::Int, vec![]))].into());
+    let context = Context::new(&fields, &schema);
+    assert_eq!(expr.unwrap().execute(&context).unwrap().deref(), &expected);
 }
 
 #[test]
 fn text_literal() {
     let expr = parse!("'A' > 'B'");
 
-    let expected = DataValue::Scalar(ScalarValue::Bool(false));
+    let expected = scalar!(Bool(false));
     assert_eq!(
-        expr.unwrap().execute(&null_row()).unwrap().deref(),
+        expr.unwrap().execute(&null_context()).unwrap().deref(),
         &expected
     );
 }
@@ -108,9 +109,9 @@ fn text_literal() {
 fn literals() {
     let expr = parse!("42");
 
-    let expected = DataValue::Scalar(ScalarValue::Int(42));
+    let expected = scalar!(Int(42));
     assert_eq!(
-        expr.unwrap().execute(&null_row()).unwrap().deref(),
+        expr.unwrap().execute(&null_context()).unwrap().deref(),
         &expected
     );
 }
@@ -119,9 +120,9 @@ fn literals() {
 fn modulo_operation() {
     let expr = parse!("10 % 3 ");
 
-    let expected = DataValue::Scalar(ScalarValue::Int(1));
+    let expected = scalar!(Int(1));
     assert_eq!(
-        expr.unwrap().execute(&null_row()).unwrap().deref(),
+        expr.unwrap().execute(&null_context()).unwrap().deref(),
         &expected
     );
 }
@@ -130,9 +131,9 @@ fn modulo_operation() {
 fn division_operation() {
     let expr = parse!("10 / 2");
 
-    let expected = DataValue::Scalar(ScalarValue::Int(5));
+    let expected = scalar!(Int(5));
     assert_eq!(
-        expr.unwrap().execute(&null_row()).unwrap().deref(),
+        expr.unwrap().execute(&null_context()).unwrap().deref(),
         &expected
     );
 }
@@ -141,9 +142,9 @@ fn division_operation() {
 fn multiplication_operation() {
     let expr = parse!("5 * 6");
 
-    let expected = DataValue::Scalar(ScalarValue::Int(30));
+    let expected = scalar!(Int(30));
     assert_eq!(
-        expr.unwrap().execute(&null_row()).unwrap().deref(),
+        expr.unwrap().execute(&null_context()).unwrap().deref(),
         &expected
     );
 }
@@ -152,10 +153,9 @@ fn multiplication_operation() {
 fn complex_boolean_expression() {
     let expr = parse!("5 + 4 < 10 AND 1 > 50");
 
-    let expected = DataValue::Scalar(ScalarValue::Bool(false));
-    println!("{:?}", expr);
+    let expected = scalar!(Bool(false));
     assert_eq!(
-        expr.unwrap().execute(&null_row()).unwrap().deref(),
+        expr.unwrap().execute(&null_context()).unwrap().deref(),
         &expected
     );
 }
@@ -164,9 +164,9 @@ fn complex_boolean_expression() {
 fn nested_boolean_expression() {
     let expr = parse!("NOT (TRUE AND FALSE) OR (5 > 3)");
 
-    let expected = DataValue::Scalar(ScalarValue::Bool(true));
+    let expected = scalar!(Bool(true));
     assert_eq!(
-        expr.unwrap().execute(&null_row()).unwrap().deref(),
+        expr.unwrap().execute(&null_context()).unwrap().deref(),
         &expected
     );
 }
@@ -175,9 +175,9 @@ fn nested_boolean_expression() {
 fn mixed_operations() {
     let expr = parse!("(5 + 3) * 4 + 2 > 20 AND 10 % 3 == 1");
 
-    let expected = DataValue::Scalar(ScalarValue::Bool(true));
+    let expected = scalar!(Bool(true));
     assert_eq!(
-        expr.unwrap().execute(&null_row()).unwrap().deref(),
+        expr.unwrap().execute(&null_context()).unwrap().deref(),
         &expected
     );
 }
@@ -186,9 +186,9 @@ fn mixed_operations() {
 fn arithmetic_with_boolean_comparison() {
     let expr = parse!("5 + 3 >= 8 AND 10 / 2 == 5");
 
-    let expected = DataValue::Scalar(ScalarValue::Bool(true));
+    let expected = scalar!(Bool(true));
     assert_eq!(
-        expr.unwrap().execute(&null_row()).unwrap().deref(),
+        expr.unwrap().execute(&null_context()).unwrap().deref(),
         &expected
     );
 }
@@ -196,9 +196,9 @@ fn arithmetic_with_boolean_comparison() {
 #[test]
 fn nested_arithmetic_with_parentheses() {
     let expr = parse!("(5 + 3) * (4 + 2) > 50");
-    let expected = DataValue::Scalar(ScalarValue::Bool(false));
+    let expected = scalar!(Bool(false));
     assert_eq!(
-        expr.unwrap().execute(&null_row()).unwrap().deref(),
+        expr.unwrap().execute(&null_context()).unwrap().deref(),
         &expected
     );
 }
@@ -216,9 +216,11 @@ fn test_bench_func() {
     );
     assert!(complex.is_ok());
 }
+use query::context::Context;
 use rstest::rstest;
-use storage::common_types::{DataValue, ScalarValue, SchemaValue};
-use storage::row::Row;
+use storage::common_types::{ScalarType, ScalarValue};
+use storage::scalar;
+use storage::schema::{FieldType, Schema};
 
 use crate::{common::TokenWalker, queries::expr::parse_expr, tokenizer::tokenize};
 
@@ -248,6 +250,7 @@ fn combinatoric_arithmetic(
     #[values(LESS, LESSEQ, GREATER, GREATEREQ, EQUAL, NEQUAL)] cmp: Op,
 ) {
     use boa_engine::{Context, Source};
+    use storage::common_types::DataValue;
     let values = vec!["2", "3", "5"];
 
     let mut js_context = Context::default();
@@ -261,7 +264,7 @@ fn combinatoric_arithmetic(
     let expected_bool = js_res.as_boolean().unwrap();
 
     let expr = parse!(&expression).unwrap();
-    let row = null_row();
+    let row = null_context();
     let your_res = expr.execute(&row);
 
     if let Ok(DataValue::Scalar(ScalarValue::Bool(b))) = your_res.as_deref() {
@@ -287,6 +290,7 @@ fn combinatoric_boolean(
     #[values(TRUE, FALSE)] value3: Op,
 ) {
     use boa_engine::{Context, Source};
+    use storage::common_types::DataValue;
     let mut js_context = Context::default();
 
     let expression = format!(
@@ -304,7 +308,7 @@ fn combinatoric_boolean(
     let expected_bool = js_res.as_boolean().unwrap();
 
     let expr = parse!(&expression).unwrap();
-    let row = null_row();
+    let row = null_context();
     let your_res = expr.execute(&row);
 
     if let Ok(DataValue::Scalar(ScalarValue::Bool(b))) = your_res.as_deref() {

@@ -5,7 +5,10 @@ use storage::{
     db::Database,
 };
 
-use crate::expr::{Expr, ExprError};
+use crate::{
+    context::Context,
+    expr::{Expr, ExprError},
+};
 
 #[cfg_attr(feature = "serialize", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, PartialEq)]
@@ -69,7 +72,8 @@ impl DeleteRows {
         };
         let mut rows = Vec::new();
         for (i, row) in table.rows().iter().enumerate() {
-            let val = self.expr.execute(row)?;
+            let context = Context::new(row.data(), table.schema());
+            let val = self.expr.execute(&context)?;
 
             match val.deref() {
                 DataValue::Null => continue,
@@ -111,16 +115,16 @@ impl TruncateTable {
 }
 #[cfg(test)]
 mod tests {
-    use std::collections::HashMap;
 
     use storage::{
-        common_types::{
-            DataType, DataValue, FieldType, ScalarType, ScalarValue, Schema, SchemaValue,
-        },
+        common_types::ScalarType,
         db::Database,
         row::Row,
+        scalar,
+        schema::{FieldType, Schema},
         table::Table,
     };
+    use structures::VecMap;
 
     use crate::{
         expr::{ComparisonOp, Expr, LiteralValue},
@@ -130,46 +134,26 @@ mod tests {
     pub fn init_db() -> Database {
         let db = Database::new();
         // Create first row
-        let mut data = HashMap::new();
-        data.insert("age".to_string(), DataValue::Scalar(ScalarValue::Int(30)));
-        data.insert(
-            "name".to_string(),
-            DataValue::Scalar(ScalarValue::Text("Alice".to_string())),
-        );
-        data.insert(
-            "is_active".to_string(),
-            DataValue::Scalar(ScalarValue::Bool(true)),
-        );
-        let type_value = SchemaValue::new(data);
-        let row1 = Row::new(type_value);
+        let mut data = Vec::new();
+        data.push(scalar!(Int(30)));
+        data.push(scalar!(Text("Alice".to_owned())));
+        data.push(scalar!(Bool(true)));
+        let row1 = Row::new(data);
 
         // Create second row
-        let mut data = HashMap::new();
-        data.insert("age".to_string(), DataValue::Scalar(ScalarValue::Int(25)));
-        data.insert(
-            "name".to_string(),
-            DataValue::Scalar(ScalarValue::Text("Bob".to_string())),
-        );
-        data.insert(
-            "is_active".to_string(),
-            DataValue::Scalar(ScalarValue::Bool(false)),
-        );
-        let type_value = SchemaValue::new(data);
-        let row2 = Row::new(type_value);
+        let mut data = Vec::new();
+        data.push(scalar!(Int(25)));
+        data.push(scalar!(Text("Bob".to_owned())));
+        data.push(scalar!(Bool(false)));
+        let row2 = Row::new(data);
 
-        let mut field_types = Vec::new();
-        field_types.push((
-            "age".to_string(),
-            FieldType::new(DataType::Scalar(ScalarType::Int), vec![]),
-        ));
-        field_types.push((
-            "name".to_string(),
-            FieldType::new(DataType::Scalar(ScalarType::Text), vec![]),
-        ));
-        field_types.push((
+        let mut field_types = VecMap::new();
+        field_types.insert("age".to_string(), FieldType::new(ScalarType::Int, vec![]));
+        field_types.insert("name".to_string(), FieldType::new(ScalarType::Text, vec![]));
+        field_types.insert(
             "is_active".to_string(),
-            FieldType::new(DataType::Scalar(ScalarType::Bool), vec![]),
-        ));
+            FieldType::new(ScalarType::Bool, vec![]),
+        );
         let schema = Schema::new(field_types);
         // Create table
         let table = Table::new(schema);
@@ -177,8 +161,18 @@ mod tests {
         // Insert into database
         db.insert_table("test_table".to_string(), table).unwrap();
         let table = db.get_table("test_table").unwrap();
-        table.insert_row(row1).unwrap();
-        table.insert_row(row2).unwrap();
+        table
+            .insert_row(
+                &vec!["age".to_owned(), "name".to_owned(), "is_active".to_owned()],
+                row1,
+            )
+            .unwrap();
+        table
+            .insert_row(
+                &vec!["age".to_owned(), "name".to_owned(), "is_active".to_owned()],
+                row2,
+            )
+            .unwrap();
 
         db
     }

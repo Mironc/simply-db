@@ -1,4 +1,7 @@
-use storage::common_types::{DataValue, ScalarValue};
+use storage::{
+    common_types::{DataValue, ScalarValue},
+    scalar,
+};
 
 use crate::tokenizer::{Delimiter, Sign, TokenValue};
 
@@ -153,8 +156,8 @@ pub fn parse_bool_null_literal<'a>(walker: &mut TokenWalker<'a, '_>) -> ParseRes
     if let TokenValue::Keyword(k) = token {
         Ok(match *k {
             "NULL" => DataValue::Null,
-            "FALSE" => DataValue::Scalar(ScalarValue::Bool(false)),
-            "TRUE" => DataValue::Scalar(ScalarValue::Bool(true)),
+            "FALSE" => scalar!(Bool(false)),
+            "TRUE" => scalar!(Bool(true)),
             _ => return Err(ParseError::UnappropriateKeyword),
         })
     } else {
@@ -212,13 +215,9 @@ pub fn parse_number_literal<'a>(walker: &mut TokenWalker<'a, '_>) -> ParseResult
     if let Some(partial) = partial {
         let val = (whole_part as f32)
             + ((partial as f32) / i32::pow(10, partial.checked_ilog10().unwrap() + 1) as f32);
-        Ok(DataValue::Scalar(ScalarValue::Float(if negative {
-            -val
-        } else {
-            val
-        })))
+        Ok(scalar!(Float(if negative { -val } else { val })))
     } else {
-        Ok(DataValue::Scalar(ScalarValue::Int(if negative {
+        Ok(scalar!(Int(if negative {
             -whole_part
         } else {
             whole_part
@@ -267,25 +266,25 @@ mod test {
         let token = tokenize(" 123").unwrap();
         let mut walker = TokenWalker::new(&token);
         let result = parse_literal(&mut walker);
-        assert_eq!(result, Ok(DataValue::Scalar(ScalarValue::Int(123))));
+        assert_eq!(result, Ok(scalar!(Int(123))));
 
         // Test float parsing
         let tokens = tokenize("123.45").unwrap();
         let mut walker = TokenWalker::new(&tokens);
         let result = parse_literal(&mut walker);
-        assert_eq!(result, Ok(DataValue::Scalar(ScalarValue::Float(123.45))));
+        assert_eq!(result, Ok(scalar!(Float(123.45))));
 
         // Test negative integer
         let tokens = tokenize(" -13").unwrap();
         let mut walker = TokenWalker::new(&tokens);
         let result = parse_literal(&mut walker);
-        assert_eq!(result, Ok(DataValue::Scalar(ScalarValue::Int(-13))));
+        assert_eq!(result, Ok(scalar!(Int(-13))));
 
         // Test negative float
         let tokens = tokenize("-31.75").unwrap();
         let mut walker = TokenWalker::new(&tokens);
         let result = parse_literal(&mut walker);
-        assert_eq!(result, Ok(DataValue::Scalar(ScalarValue::Float(-31.75))));
+        assert_eq!(result, Ok(scalar!(Float(-31.75))));
     }
     #[test]
     fn null_literal_parsing() {
@@ -299,12 +298,12 @@ mod test {
         let tokens = tokenize(" TRUE ").unwrap();
         let mut walker = TokenWalker::new(&tokens);
         let result = parse_literal(&mut walker);
-        assert_eq!(result, Ok(DataValue::Scalar(ScalarValue::Bool(true))));
+        assert_eq!(result, Ok(scalar!(Bool(true))));
 
         let tokens = tokenize(" FALSE ").unwrap();
         let mut walker = TokenWalker::new(&tokens);
         let result = parse_literal(&mut walker);
-        assert_eq!(result, Ok(DataValue::Scalar(ScalarValue::Bool(false))));
+        assert_eq!(result, Ok(scalar!(Bool(false))));
     }
 
     #[test]
@@ -337,7 +336,7 @@ mod test {
         let tokens = tokenize("123.45.67").unwrap();
         let mut walker = TokenWalker::new(&tokens);
         let result = parse_literal(&mut walker);
-        assert_eq!(result, Ok(DataValue::Scalar(ScalarValue::Float(123.45))));
+        assert_eq!(result, Ok(scalar!(Float(123.45))));
         let result = parse_literal(&mut walker);
         assert_eq!(
             result,

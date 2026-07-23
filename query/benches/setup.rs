@@ -1,8 +1,10 @@
 use query::queries::insert::InsertQuery;
 use storage::{
-    common_types::{FieldModifier, FieldType, Schema, SchemaValue},
+    common_types::ScalarType,
     db::Database,
-    hashmap, scalar, scalar_type,
+    row::Row,
+    scalar,
+    schema::{FieldModifier, FieldType, Schema},
     table::Table,
 };
 
@@ -13,12 +15,15 @@ pub struct Record {
     email: String,
 }
 impl Record {
-    pub fn into_schema_value(&self) -> SchemaValue {
-        SchemaValue::new(hashmap!(
-            "id".to_owned() => scalar!(Int(self.id)),
-            "name".to_owned() => scalar!(Text(self.name.clone())),
-            "email".to_owned() => scalar!(Text(self.email.clone()))
-        ))
+    pub fn into_row(&self) -> Row {
+        Row::new(vec![
+            scalar!(Int(self.id)),
+            scalar!(Text(self.name.clone())),
+            scalar!(Text(self.email.clone())),
+        ])
+    }
+    pub fn field_names() -> Vec<String> {
+        vec!["id".to_owned(), "name".to_owned(), "email".to_owned()]
     }
 }
 pub fn read_records() -> Vec<Record> {
@@ -31,14 +36,17 @@ pub fn read_records() -> Vec<Record> {
 
 pub fn init_db() -> Database {
     let db = Database::new();
-    let field_id = FieldType::new(scalar_type!(Int), vec![FieldModifier::NotNull]);
-    let field_name = FieldType::new(scalar_type!(Text), vec![FieldModifier::NotNull]);
-    let field_email = FieldType::new(scalar_type!(Text), vec![FieldModifier::NotNull]);
-    let schema = Schema::new(vec![
-        ("id".to_owned(), field_id),
-        ("name".to_owned(), field_name),
-        ("email".to_owned(), field_email),
-    ]);
+    let field_id = FieldType::new(ScalarType::Int, vec![FieldModifier::NotNull]);
+    let field_name = FieldType::new(ScalarType::Text, vec![FieldModifier::NotNull]);
+    let field_email = FieldType::new(ScalarType::Text, vec![FieldModifier::NotNull]);
+    let schema = Schema::new(
+        vec![
+            ("id".to_owned(), field_id),
+            ("name".to_owned(), field_name),
+            ("email".to_owned(), field_email),
+        ]
+        .into(),
+    );
     let table = Table::new(schema);
     db.insert_table("users".to_owned(), table).unwrap();
     db
@@ -47,16 +55,19 @@ pub fn init_db() -> Database {
 pub fn init_db_unique() -> Database {
     let db = Database::new();
     let field_id = FieldType::new(
-        scalar_type!(Int),
+        ScalarType::Int,
         vec![FieldModifier::NotNull, FieldModifier::Unique],
     );
-    let field_name = FieldType::new(scalar_type!(Text), vec![FieldModifier::NotNull]);
-    let field_email = FieldType::new(scalar_type!(Text), vec![FieldModifier::NotNull]);
-    let schema = Schema::new(vec![
-        ("id".to_owned(), field_id),
-        ("name".to_owned(), field_name),
-        ("email".to_owned(), field_email),
-    ]);
+    let field_name = FieldType::new(ScalarType::Text, vec![FieldModifier::NotNull]);
+    let field_email = FieldType::new(ScalarType::Text, vec![FieldModifier::NotNull]);
+    let schema = Schema::new(
+        vec![
+            ("id".to_owned(), field_id),
+            ("name".to_owned(), field_name),
+            ("email".to_owned(), field_email),
+        ]
+        .into(),
+    );
     let table = Table::new(schema);
     db.insert_table("users".to_owned(), table).unwrap();
     db
@@ -64,7 +75,8 @@ pub fn init_db_unique() -> Database {
 pub fn insert_records(db: &Database, records: &[Record]) {
     let insert_query = InsertQuery::new(
         "users".to_owned(),
-        records.iter().map(|x| x.into_schema_value()).collect(),
+        Record::field_names(),
+        records.iter().map(|x| x.into_row()).collect(),
     );
     insert_query.execute(db).unwrap();
 }

@@ -9,14 +9,19 @@ use crate::setup::{Record, init_db, init_db_unique, read_records};
 
 fn insert_by_one(db: &mut Database, records: &[Record]) {
     for record in records {
-        let insert_query = InsertQuery::new("users".to_owned(), vec![record.into_schema_value()]);
+        let insert_query = InsertQuery::new(
+            "users".to_owned(),
+            Record::field_names(),
+            vec![record.into_row()],
+        );
         insert_query.execute(db).unwrap();
     }
 }
 fn insert_batch(db: &mut Database, records: &[Record]) {
     let insert_query = InsertQuery::new(
         "users".to_owned(),
-        records.iter().map(|x| x.into_schema_value()).collect(),
+        Record::field_names(),
+        records.iter().map(|x| x.into_row()).collect(),
     );
     insert_query.execute(db).unwrap();
 }

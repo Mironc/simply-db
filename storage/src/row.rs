@@ -1,19 +1,19 @@
-use crate::common_types::SchemaValue;
-#[derive(Debug, Clone)]
+use crate::common_types::DataValue;
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct Row {
-    data: SchemaValue,
+    data: Vec<DataValue>,
 }
 
 impl Row {
-    pub fn new(data: SchemaValue) -> Self {
+    pub fn new(data: Vec<DataValue>) -> Self {
         Self { data }
     }
 
-    pub fn data(&self) -> &SchemaValue {
+    pub fn data(&self) -> &Vec<DataValue> {
         &self.data
     }
-
-    pub fn data_mut(&mut self) -> &mut SchemaValue {
+    pub fn data_mut(&mut self) -> &mut Vec<DataValue> {
         &mut self.data
     }
 }

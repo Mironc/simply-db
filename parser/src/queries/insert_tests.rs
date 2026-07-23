@@ -1,5 +1,5 @@
 use query::{Query, queries::insert::InsertQuery};
-use storage::{common_types::SchemaValue, hashmap, scalar};
+use storage::{row::Row, scalar};
 
 use crate::{
     common::{ParseError, TokenWalker},
@@ -80,11 +80,12 @@ fn insert_query() {
     let tokens = tokenize("INSERT INTO table (int, string) VALUES (100, 'text' )").unwrap();
     println!("{:?}", tokens);
     let insert_query = parse_query(tokens);
-    let values = hashmap!(
-            "int".to_owned()=> scalar!(Int(100)),
-            "string".to_owned()=> scalar!(Text("text"))
+    let values = vec![scalar!(Int(100)), scalar!(Text("text"))];
+    let cmp_query = InsertQuery::new(
+        "table".to_owned(),
+        vec!["int".to_owned(), "string".to_owned()],
+        vec![Row::new(values)],
     );
-    let cmp_query = InsertQuery::new("table".to_owned(), vec![SchemaValue::new(values)]);
     assert_eq!(insert_query, Ok(Query::Insert(cmp_query)));
 
     // Test insert query with multiple fields with multiple rows
@@ -95,24 +96,19 @@ fn insert_query() {
     let insert_query = parse_insert_query(walker);
     let mut rows = Vec::new();
 
-    let fields = hashmap!(
-        "int".to_owned() => scalar!(Int(100)),
-        "string".to_owned() => scalar!(Text("text"))
-    );
-    rows.push(SchemaValue::new(fields.clone()));
+    let fields = vec![scalar!(Int(100)), scalar!(Text("text"))];
+    rows.push(Row::new(fields.clone()));
 
-    let fields = hashmap!(
-            "int".to_owned() => scalar!(Int(50)),
-            "string".to_owned() => scalar!(Text("t"))
-    );
-    rows.push(SchemaValue::new(fields.clone()));
+    let fields = vec![scalar!(Int(50)), scalar!(Text("t"))];
+    rows.push(Row::new(fields.clone()));
 
-    let fields = hashmap!(
-        "int".to_owned() => scalar!(Int(17)),
-        "string".to_owned() => scalar!(Text("Steve"))
-    );
-    rows.push(SchemaValue::new(fields));
+    let fields = vec![scalar!(Int(17)), scalar!(Text("Steve"))];
+    rows.push(Row::new(fields));
 
-    let cmp_query = InsertQuery::new("table".to_owned(), rows);
+    let cmp_query = InsertQuery::new(
+        "table".to_owned(),
+        vec!["int".to_owned(), "string".to_owned()],
+        rows,
+    );
     assert_eq!(insert_query, Ok(Query::Insert(cmp_query)));
 }

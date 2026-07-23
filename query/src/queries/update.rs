@@ -1,11 +1,14 @@
 use std::ops::Deref;
 
 use storage::{
-    common_types::{DataType, DataValue, ScalarValue},
+    common_types::{DataValue, ScalarType, ScalarValue},
     db::Database,
 };
 
-use crate::expr::{Expr, ExprError};
+use crate::{
+    context::Context,
+    expr::{Expr, ExprError},
+};
 
 #[cfg_attr(feature = "serialize", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, PartialEq)]
@@ -21,7 +24,7 @@ pub enum UpdateError {
         field: String,
     },
     SetTypeMismatch {
-        expected: DataType,
+        expected: ScalarType,
         given: DataValue,
     },
     /// Filter expression returns not bool
@@ -53,8 +56,9 @@ impl UpdateQuery {
         })?;
         let schema = table.schema().clone();
         for row in table.rows_mut().iter_mut() {
+            let context = Context::new(row.data(), &schema);
             if let Some(expr) = &self.filter_expr {
-                if let DataValue::Scalar(ScalarValue::Bool(b)) = expr.execute(row)?.deref() {
+                if let DataValue::Scalar(ScalarValue::Bool(b)) = expr.execute(&context)?.deref() {
                     if !b {
                         continue;
                     }
@@ -64,15 +68,21 @@ impl UpdateQuery {
             }
             let mut values = Vec::new();
             for (set_field, set_expr) in self.set_exprs().iter() {
-                let res = set_expr.execute(row)?.into_owned();
+                let res = set_expr.execute(&context)?.into_owned();
                 if let Some(field) = schema.fields().iter().find(|x| x.0 == *set_field) {
-                    if res.validate(field.1.data_type(), field.1.is_nullable()) {
+                    if let DataValue::Scalar(scalar_value) = &res
+                        && field.1.data_type() == scalar_value.scalar_type()
+                    {
                         values.push((set_field, res));
                     } else {
                         if matches!(res, DataValue::Null) && !field.1.is_nullable() {
-                            return Err(UpdateError::NullExpection {
-                                field: set_field.clone(),
-                            });
+                            if !field.1.is_nullable() {
+                                return Err(UpdateError::NullExpection {
+                                    field: set_field.clone(),
+                                });
+                            } else {
+                                values.push((set_field, DataValue::Null));
+                            }
                         }
                         return Err(UpdateError::SetTypeMismatch {
                             expected: field.1.data_type().clone(),
@@ -86,10 +96,13 @@ impl UpdateQuery {
                 }
             }
             for (set_field, value) in values.into_iter() {
+                let set_idx = schema
+                    .fields()
+                    .get_index(set_field)
+                    .expect("Expected valid set_field");
                 *(row
                     .data_mut()
-                    .fields_mut()
-                    .get_mut(set_field)
+                    .get_mut(set_idx)
                     .expect("Should be a valid field")) = value.clone();
             }
         }
@@ -110,10 +123,13 @@ impl UpdateQuery {
 #[cfg(test)]
 mod test {
     use storage::{
-        common_types::{FieldModifier, FieldType, Schema, SchemaValue},
+        common_types::ScalarType,
         db::Database,
-        hashmap, scalar, scalar_type,
+        row::Row,
+        scalar,
+        schema::{FieldModifier, FieldType, Schema},
     };
+    use structures::VecMap;
 
     use crate::{
         expr::{Expr, LiteralValue},
@@ -128,18 +144,18 @@ mod test {
         let mut db = Database::new();
 
         // Create a table with one field
-        let mut field_types = Vec::new();
-        field_types.push((
+        let mut field_types = VecMap::new();
+        field_types.insert(
             "age".to_string(),
-            FieldType::new(scalar_type!(Int), vec![FieldModifier::NotNull]),
-        ));
+            FieldType::new(ScalarType::Int, vec![FieldModifier::NotNull]),
+        );
         let schema = Schema::new(field_types);
 
         let create_table = CreateTable::new("table".to_string(), schema, false);
         create_table.execute(&mut db).unwrap();
 
-        let schema = SchemaValue::new(hashmap!("age".to_string()=>scalar!(Int(10))));
-        let insert_table = InsertQuery::new("table".to_string(), vec![schema]);
+        let row = Row::new(vec![scalar!(Int(10))]);
+        let insert_table = InsertQuery::new("table".to_string(), vec!["age".to_owned()], vec![row]);
         insert_table.execute(&mut db).unwrap();
         db
     }

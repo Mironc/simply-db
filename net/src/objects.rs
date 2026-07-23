@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use parser::{ExpectExprErr, ParseError};
 use query::{QueryError, QueryOutput};
 use serde::{Deserialize, Serialize};
-use storage::common_types::Schema;
+use storage::schema::Schema;
 
 /// Output of `/v1/overview` route.
 ///

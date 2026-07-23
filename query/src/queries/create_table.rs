@@ -1,4 +1,4 @@
-use storage::{common_types::Schema, db::Database, table::Table};
+use storage::{db::Database, schema::Schema, table::Table};
 
 #[cfg_attr(feature = "serialize", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone)]
@@ -36,23 +36,19 @@ impl CreateTable {
 #[cfg(test)]
 mod test {
     use storage::{
-        common_types::{DataType, FieldType, ScalarType, Schema},
+        common_types::ScalarType,
         db::Database,
+        schema::{FieldType, Schema},
     };
+    use structures::VecMap;
 
     use crate::queries::create_table::CreateTable;
 
     #[test]
     fn success() {
-        let mut fields = Vec::new();
-        fields.push((
-            "age".to_string(),
-            FieldType::new(DataType::Scalar(ScalarType::Int), vec![]),
-        ));
-        fields.push((
-            "name".to_string(),
-            FieldType::new(DataType::Scalar(ScalarType::Text), vec![]),
-        ));
+        let mut fields = VecMap::new();
+        fields.insert("age".to_string(), FieldType::new(ScalarType::Int, vec![]));
+        fields.insert("name".to_string(), FieldType::new(ScalarType::Text, vec![]));
         let row_type = Schema::new(fields);
         let mut db = Database::new();
         let create_table = CreateTable::new("table1".to_string(), row_type, false);
@@ -61,15 +57,9 @@ mod test {
 
     #[test]
     fn already_exists() {
-        let mut fields = Vec::new();
-        fields.push((
-            "age".to_string(),
-            FieldType::new(DataType::Scalar(ScalarType::Int), vec![]),
-        ));
-        fields.push((
-            "name".to_string(),
-            FieldType::new(DataType::Scalar(ScalarType::Text), vec![]),
-        ));
+        let mut fields = VecMap::new();
+        fields.insert("age".to_string(), FieldType::new(ScalarType::Int, vec![]));
+        fields.insert("name".to_string(), FieldType::new(ScalarType::Text, vec![]));
         let row_type = Schema::new(fields);
         let mut db = Database::new();
         let create_table = CreateTable::new("table1".to_string(), row_type.clone(), false);

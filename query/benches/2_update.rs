@@ -4,7 +4,7 @@ use crate::{
     setup::{init_db, insert_records, read_records},
 };
 mod setup;
-use criterion::{BatchSize, Criterion, criterion_group, criterion_main};
+use criterion::{BatchSize, Criterion, Throughput, criterion_group, criterion_main};
 use query::{
     expr::{Expr, LiteralValue},
     queries::update::{UpdateError, UpdateQuery},
@@ -27,6 +27,7 @@ fn criterion_benchmark(c: &mut Criterion<WallTimeQps>) {
     let db = init_db();
     insert_records(&db, &records);
     let mut group = c.benchmark_group("update");
+    group.throughput(Throughput::Elements(1));
     group.bench_function("update", |b| {
         b.iter_batched_ref(|| db.clone(), |db| update_rows(db), BatchSize::LargeInput);
     });

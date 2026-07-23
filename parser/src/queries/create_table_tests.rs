@@ -1,8 +1,9 @@
 use query::{Query, queries::create_table::CreateTable};
 use storage::{
-    common_types::{FieldModifier, FieldType, Schema},
-    scalar_type,
+    common_types::ScalarType,
+    schema::{FieldModifier, FieldType, Schema},
 };
+use structures::VecMap;
 
 use crate::{
     common::{ParseError, TokenWalker},
@@ -19,15 +20,15 @@ fn create_table_success() {
     let walker = TokenWalker::new(&tokens);
     let query = parse_create_query(walker);
 
-    let mut row_type = Vec::new();
-    row_type.push((
+    let mut row_type = VecMap::new();
+    row_type.insert(
         "id".to_owned(),
-        FieldType::new(scalar_type!(Int), vec![FieldModifier::PrimaryKey]),
-    ));
-    row_type.push((
+        FieldType::new(ScalarType::Int, vec![FieldModifier::PrimaryKey]),
+    );
+    row_type.insert(
         "name".to_owned(),
-        FieldType::new(scalar_type!(Text), vec![FieldModifier::NotNull]),
-    ));
+        FieldType::new(ScalarType::Text, vec![FieldModifier::NotNull]),
+    );
     let cmp_query = CreateTable::new("users".to_owned(), Schema::new(row_type), true);
 
     assert_eq!(query, Ok(Query::CreateTable(cmp_query)))
@@ -39,15 +40,12 @@ fn create_table_no_modifiers() {
     let walker = TokenWalker::new(&tokens);
     let query = parse_create_query(walker);
 
-    let mut row_type = Vec::new();
-    row_type.push((
-        "id".to_owned(),
-        FieldType::new(scalar_type!(Int), Vec::new()),
-    ));
-    row_type.push((
+    let mut row_type = VecMap::new();
+    row_type.insert("id".to_owned(), FieldType::new(ScalarType::Int, Vec::new()));
+    row_type.insert(
         "name".to_owned(),
-        FieldType::new(scalar_type!(Text), Vec::new()),
-    ));
+        FieldType::new(ScalarType::Text, Vec::new()),
+    );
     let cmp_query = CreateTable::new("users".to_owned(), Schema::new(row_type), true);
 
     assert_eq!(query, Ok(Query::CreateTable(cmp_query)))

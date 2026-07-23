@@ -1,11 +1,10 @@
 [package]
-name = "storage"
+name = "structures"
 version = "0.1.0"
 edition = "2024"
 
 [dependencies]
 serde = { workspace = true, optional = true }
-structures = { path = "../structures/" }
 
 [features]
-serialize = ["serde","structures/serialize"]
+serialize = ["serde"]

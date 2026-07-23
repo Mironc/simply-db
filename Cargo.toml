@@ -6,7 +6,7 @@ rust-version = "1.88"
 
 [workspace]
 resolver = "3"
-members = ["net", "parser/", "query/", "storage/"]
+members = ["net", "parser/", "query/", "storage/", "structures/"]
 
 [workspace.dependencies]
 axum = { version = "0.8", default-features = false, features = ["http1", "json", "macros", "tokio"] }
