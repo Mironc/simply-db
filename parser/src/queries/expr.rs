@@ -7,7 +7,7 @@ use crate::common::{
     parse_number_literal,
 };
 
-use crate::tokenizer::{Delimiter, Sign, TokenValue};
+use crate::tokenizer::{Delimiter, Keyword, Sign, TokenValue};
 
 /// This is for future optimization
 pub type Prefix = HashMap<TokenValue<'static>, Vec<usize>>;
@@ -48,7 +48,7 @@ pub fn parse_or<'a>(walker: &mut TokenWalker<'a, '_>, end: usize) -> ExprParseRe
 
     while walker.position() < end {
         if let Some(TokenValue::Keyword(k)) = walker.peek_next() {
-            if k == &"OR" {
+            if *k == Keyword::Or {
                 walker.next(); // skip OR keyword
                 let right = parse_and(walker, end)?;
                 left = Expr::Logical(Box::new(LogicOp::Or(left, right)));
@@ -65,7 +65,7 @@ pub fn parse_and<'a>(walker: &mut TokenWalker<'a, '_>, end: usize) -> ExprParseR
 
     while walker.position() < end {
         if let Some(TokenValue::Keyword(k)) = walker.peek_next() {
-            if k == &"AND" {
+            if *k == Keyword::And {
                 walker.next();
                 let right = parse_not(walker, end)?;
                 left = Expr::Logical(Box::new(LogicOp::And(left, right)));
@@ -79,7 +79,7 @@ pub fn parse_and<'a>(walker: &mut TokenWalker<'a, '_>, end: usize) -> ExprParseR
 
 pub fn parse_not<'a>(walker: &mut TokenWalker<'a, '_>, end: usize) -> ExprParseResult<'a, Expr> {
     if let Some(TokenValue::Keyword(k)) = walker.peek_next() {
-        if k == &"NOT" {
+        if *k == Keyword::Not {
             walker.next();
             let right = parse_not(walker, end)?;
             return Ok(Expr::Logical(Box::new(LogicOp::Not(right))));
@@ -238,7 +238,7 @@ pub fn parse_literal_or_field<'a>(
             },
         },
         TokenValue::Keyword(keyword) => {
-            if *keyword == "AND" || *keyword == "OR" {
+            if *keyword == Keyword::And || *keyword == Keyword::Or {
                 return Err(ParseError::ExpectedExpr(ExpectExprErr::Before {
                     symbol: token.as_str(),
                 }));

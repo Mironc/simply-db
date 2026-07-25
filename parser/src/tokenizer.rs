@@ -7,7 +7,7 @@ pub enum TokenValue<'a> {
     Ident(&'a str),
     Sign(Sign),
     Delimiter(Delimiter),
-    Keyword(&'a str),
+    Keyword(Keyword),
     TextLiteral(&'a str),
     /// Start of the file
     SOF,
@@ -33,7 +33,7 @@ impl<'a> TokenValue<'a> {
             TokenValue::Ident(w) => w,
             TokenValue::Sign(sign) => sign.as_str(),
             TokenValue::Delimiter(delimiter) => delimiter.as_str(),
-            TokenValue::Keyword(k) => k,
+            TokenValue::Keyword(k) => k.as_str(),
             TokenValue::SOF => "Sof",
             TokenValue::TextLiteral(l) => l,
         }
@@ -48,6 +48,91 @@ impl<'a> TokenValue<'a> {
         matches!(self, TokenValue::SOF)
     }
 }
+
+macro_rules! implement_keywords {
+    ($name:ident, $(($variant:ident,$symbol:literal)),+) => {
+        #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+        pub enum $name{
+            $(
+            #[doc = concat!("Represents keyword:",stringify!($symbol))]
+            $variant,
+            )+
+        }
+        impl $name{
+            pub fn from_str(s: &str) -> Option<Self> {
+                match s {
+                    $($symbol => Some($name::$variant),)+
+                    _ => None
+                }
+            }
+            pub fn as_str(&self) -> &'static str{
+                match self {
+                    $($name::$variant => $symbol,)+
+                }
+            }
+        }
+        impl std::fmt::Display for $name {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                let s = match self {
+                    $($name::$variant => $symbol,)+
+                };
+                f.write_str(s)
+            }
+        }
+    };
+}
+implement_keywords!(
+    Keyword,
+    (Select, "SELECT"),
+    (From, "FROM"),
+    (Where, "WHERE"),
+    (Group, "GROUP"),
+    (By, "BY"),
+    (If, "IF"),
+    (Order, "ORDER"),
+    (Distinct, "DISTINCT"),
+    (As, "AS"),
+    (Limit, "LIMIT"),
+    (Insert, "INSERT"),
+    (Into, "INTO"),
+    (Values, "VALUES"),
+    (Update, "UPDATE"),
+    (Set, "SET"),
+    (Delete, "DELETE"),
+    (Create, "CREATE"),
+    (Drop, "DROP"),
+    (Truncate, "TRUNCATE"),
+    (Using, "USING"),
+    (And, "AND"),
+    (Or, "OR"),
+    (Not, "NOT"),
+    (In, "IN"),
+    (Is, "IS"),
+    (Null, "NULL"),
+    (Exists, "EXISTS"),
+    (Case, "CASE"),
+    (When, "WHEN"),
+    (Then, "THEN"),
+    (Else, "ELSE"),
+    (End, "END"),
+    (All, "ALL"),
+    (Primary, "PRIMARY"),
+    (Key, "KEY"),
+    (Foreign, "FOREIGN"),
+    (References, "REFERENCES"),
+    (Unique, "UNIQUE"),
+    (AutoIncrement, "AUTOINCREMENT"),
+    (Check, "CHECK"),
+    (Default, "DEFAULT"),
+    (Index, "INDEX"),
+    (View, "VIEW"),
+    (Trigger, "TRIGGER"),
+    (Database, "DATABASE"),
+    (Table, "TABLE"),
+    (Column, "COLUMN"),
+    (False, "FALSE"),
+    (True, "TRUE")
+);
 
 macro_rules! implement_special_character {
     ($name:ident, $(($variant:ident,$symbol:literal)),+) => {
@@ -126,68 +211,6 @@ implement_special_character!(
     (Pipe, "|")
 );
 
-macro_rules! lookup_fn {
-    ($($branch:literal),+) => {
-        #[inline(always)]
-        fn lookup_keyword(value:&str) -> bool{
-            match value{
-                $($branch => true,)+
-                _ => false
-            }
-        }
-    };
-}
-lookup_fn!(
-    "SELECT",
-    "FROM",
-    "WHERE",
-    "GROUP",
-    "BY",
-    "IF",
-    "ORDER",
-    "DISTINCT",
-    "AS",
-    "LIMIT",
-    "INSERT",
-    "INTO",
-    "VALUES",
-    "UPDATE",
-    "SET",
-    "DELETE",
-    "CREATE",
-    "DROP",
-    "TRUNCATE",
-    "USING",
-    "AND",
-    "OR",
-    "NOT",
-    "IN",
-    "IS",
-    "NULL",
-    "EXISTS",
-    "CASE",
-    "WHEN",
-    "THEN",
-    "ELSE",
-    "END",
-    "ALL",
-    "PRIMARY",
-    "KEY",
-    "FOREIGN",
-    "REFERENCES",
-    "UNIQUE",
-    "CHECK",
-    "DEFAULT",
-    "INDEX",
-    "VIEW",
-    "TRIGGER",
-    "DATABASE",
-    "TABLE",
-    "COLUMN",
-    "FALSE",
-    "TRUE"
-);
-
 /// Turns string into vector of tokens
 pub fn tokenize<'a>(source: &'a str) -> Result<Vec<TokenValue<'a>>, ParseError<'a>> {
     let source = source.trim();
@@ -247,8 +270,8 @@ pub fn tokenize<'a>(source: &'a str) -> Result<Vec<TokenValue<'a>>, ParseError<'
             end = ind + c.len_utf8();
             char_ind.next();
         }
-        if lookup_keyword(&source[start..end]) {
-            tokens.push(TokenValue::Keyword(&source[start..end]));
+        if let Some(keyword) = Keyword::from_str(&source[start..end]) {
+            tokens.push(TokenValue::Keyword(keyword));
         } else {
             tokens.push(TokenValue::Ident(&source[start..end]));
         }
@@ -266,8 +289,8 @@ mod tests {
         (Ident($value:expr)) => {
             parser::tokenizer::TokenValue::Ident($value.into())
         };
-        (Keyword($value:expr)) => {
-            parser::tokenizer::TokenValue::Keyword($value.into())
+        (Keyword($value:ident)) => {
+            parser::tokenizer::TokenValue::Keyword(parser::tokenizer::Keyword::$value)
         };
         (Delimiter($value:ident)) => {
             parser::tokenizer::TokenValue::Delimiter(parser::tokenizer::Delimiter::$value)
@@ -288,11 +311,11 @@ mod tests {
             tokenized.unwrap(),
             vec![
                 TokenValue::SOF,
-                token!(Keyword("SELECT")),
+                token!(Keyword(Select)),
                 token!(Ident("price")),
-                token!(Keyword("FROM")),
+                token!(Keyword(From)),
                 token!(Ident("Prices")),
-                token!(Keyword("WHERE")),
+                token!(Keyword(Where)),
                 token!(Ident("price")),
                 token!(Sign(Less)),
                 token!(Ident("100"))
@@ -305,11 +328,11 @@ mod tests {
             tokenized.unwrap(),
             vec![
                 TokenValue::SOF,
-                token!(Keyword("SELECT")),
+                token!(Keyword(Select)),
                 token!(Ident("price")),
-                token!(Keyword("FROM")),
+                token!(Keyword(From)),
                 token!(Ident("Prices")),
-                token!(Keyword("WHERE")),
+                token!(Keyword(Where)),
                 token!(Ident("price")),
                 token!(Sign(LessEq)),
                 token!(Ident("100")),
@@ -322,11 +345,11 @@ mod tests {
             tokenized.unwrap(),
             vec![
                 TokenValue::SOF,
-                token!(Keyword("SELECT")),
+                token!(Keyword(Select)),
                 token!(Ident("price")),
-                token!(Keyword("FROM")),
+                token!(Keyword(From)),
                 token!(Ident("Prices")),
-                token!(Keyword("WHERE")),
+                token!(Keyword(Where)),
                 token!(Delimiter(RoundOpen)),
                 token!(Ident("price")),
                 token!(Sign(GreaterEq)),
@@ -341,15 +364,15 @@ mod tests {
             tokenized.unwrap(),
             vec![
                 TokenValue::SOF,
-                token!(Keyword("INSERT")),
-                token!(Keyword("INTO")),
+                token!(Keyword(Insert)),
+                token!(Keyword(Into)),
                 token!(Ident("Items")),
                 token!(Delimiter(RoundOpen)),
                 token!(Ident("price")),
                 token!(Delimiter(Comma)),
                 token!(Ident("name")),
                 token!(Delimiter(RoundClose)),
-                token!(Keyword("VALUES")),
+                token!(Keyword(Values)),
                 token!(Delimiter(RoundOpen)),
                 token!(Ident("50")),
                 token!(Delimiter(Comma)),

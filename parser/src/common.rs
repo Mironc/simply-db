@@ -3,7 +3,7 @@ use storage::{
     scalar,
 };
 
-use crate::tokenizer::{Delimiter, Sign, TokenValue};
+use crate::tokenizer::{Delimiter, Keyword, Sign, TokenValue};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ExpectExprErr<'a> {
@@ -160,9 +160,9 @@ pub fn parse_bool_null_literal<'a>(walker: &mut TokenWalker<'a, '_>) -> ParseRes
     let token = walker.next().ok_or(ParseError::UnexpectedEof)?;
     if let TokenValue::Keyword(k) = token {
         Ok(match *k {
-            "NULL" => DataValue::Null,
-            "FALSE" => scalar!(Bool(false)),
-            "TRUE" => scalar!(Bool(true)),
+            Keyword::Null => DataValue::Null,
+            Keyword::False => scalar!(Bool(false)),
+            Keyword::True => scalar!(Bool(true)),
             _ => return Err(ParseError::UnappropriateKeyword),
         })
     } else {

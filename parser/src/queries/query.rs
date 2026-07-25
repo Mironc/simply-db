@@ -18,7 +18,7 @@ use structures::VecMap;
 use crate::{
     common::{ParseError, ParseResult, TokenWalker, parse_field_name, parse_literal},
     queries::expr::parse_expr,
-    tokenizer::{Delimiter, TokenValue},
+    tokenizer::{Delimiter, Keyword, TokenValue},
 };
 
 use crate::tokenizer::Sign;
@@ -26,18 +26,18 @@ use crate::tokenizer::Sign;
 pub fn parse_query<'a>(tokens: Vec<TokenValue<'a>>) -> ParseResult<'a, Query> {
     let walker = TokenWalker::new(&tokens);
     match walker.peek_next().ok_or(ParseError::UnknownInstruction)? {
-        TokenValue::Keyword("INSERT") => parse_insert_query(walker),
-        TokenValue::Keyword("CREATE") => parse_create_query(walker),
-        TokenValue::Keyword("SELECT") => parse_select_query(walker),
-        TokenValue::Keyword("UPDATE") => parse_update_query(walker),
-        TokenValue::Keyword("DROP") => parse_drop_query(walker),
-        TokenValue::Keyword("TRUNCATE") => parse_truncate_query(walker),
-        TokenValue::Keyword("DELETE") => parse_delete_query(walker),
+        TokenValue::Keyword(Keyword::Insert) => parse_insert_query(walker),
+        TokenValue::Keyword(Keyword::Create) => parse_create_query(walker),
+        TokenValue::Keyword(Keyword::Select) => parse_select_query(walker),
+        TokenValue::Keyword(Keyword::Update) => parse_update_query(walker),
+        TokenValue::Keyword(Keyword::Drop) => parse_drop_query(walker),
+        TokenValue::Keyword(Keyword::Truncate) => parse_truncate_query(walker),
+        TokenValue::Keyword(Keyword::Delete) => parse_delete_query(walker),
         _ => Err(ParseError::UnknownInstruction),
     }
 }
 pub(super) fn parse_update_query<'a>(mut walker: TokenWalker<'a, '_>) -> ParseResult<'a, Query> {
-    walker.expect_next_token(&TokenValue::Keyword("UPDATE"))?;
+    walker.expect_next_token(&TokenValue::Keyword(Keyword::Update))?;
     let table_name_token = walker.next().ok_or(ParseError::UnexpectedEof)?;
     if table_name_token.starts_with_digit() || !table_name_token.is_ident() {
         return Err(ParseError::UnexpectedSymbol {
@@ -47,10 +47,10 @@ pub(super) fn parse_update_query<'a>(mut walker: TokenWalker<'a, '_>) -> ParseRe
     }
     let table_name = table_name_token.to_string();
 
-    walker.expect_next_token(&TokenValue::Keyword("SET"))?;
+    walker.expect_next_token(&TokenValue::Keyword(Keyword::Set))?;
     let mut set_exprs = Vec::new();
     'outer: while let Some(token) = walker.peek_next()
-        && token != &TokenValue::Keyword("WHERE")
+        && token != &TokenValue::Keyword(Keyword::Where)
     {
         let field_name = parse_field_name(&mut walker)?;
         walker.expect_next_token(&TokenValue::Sign(Sign::Set))?;
@@ -60,7 +60,7 @@ pub(super) fn parse_update_query<'a>(mut walker: TokenWalker<'a, '_>) -> ParseRe
             if token == &TokenValue::Delimiter(Delimiter::Comma) {
                 break;
             }
-            if token == &TokenValue::Keyword("WHERE") {
+            if token == &TokenValue::Keyword(Keyword::Where) {
                 set_exprs.push((field_name, parse_expr(&mut clone, walker.position())?));
                 break 'outer;
             }
@@ -69,9 +69,9 @@ pub(super) fn parse_update_query<'a>(mut walker: TokenWalker<'a, '_>) -> ParseRe
         set_exprs.push((field_name, parse_expr(&mut clone, walker.position())?));
     }
     let filter_expr = if let Some(token) = walker.current_token()
-        && token == &TokenValue::Keyword("WHERE")
+        && token == &TokenValue::Keyword(Keyword::Where)
     {
-        if token != &TokenValue::Keyword("WHERE") {
+        if token != &TokenValue::Keyword(Keyword::Where) {
             return Err(ParseError::UnexpectedSymbol {
                 expected: "WHERE clause",
                 given: token.as_str(),
@@ -86,20 +86,20 @@ pub(super) fn parse_update_query<'a>(mut walker: TokenWalker<'a, '_>) -> ParseRe
     Ok(Query::Update(query))
 }
 pub(super) fn parse_select_query<'a>(mut walker: TokenWalker<'a, '_>) -> ParseResult<'a, Query> {
-    walker.expect_next_token(&TokenValue::Keyword("SELECT"))?;
+    walker.expect_next_token(&TokenValue::Keyword(Keyword::Select))?;
 
     let projection = if walker.peek_next().ok_or(ParseError::UnexpectedEof)?
         == &TokenValue::Sign(Sign::Asterisk)
     {
         walker.skip(1);
-        walker.expect_next_token(&TokenValue::Keyword("FROM"))?;
+        walker.expect_next_token(&TokenValue::Keyword(Keyword::From))?;
         Projection::Row
     } else {
         let mut expressions = Vec::new();
         let mut open = 0;
         let mut walker_new = walker.clone_simple();
         let mut token = walker.next().ok_or(ParseError::UnexpectedEof)?;
-        while token != &TokenValue::Keyword("FROM") {
+        while token != &TokenValue::Keyword(Keyword::From) {
             if token.to_string() == "(" {
                 open += 1
             }
@@ -128,7 +128,7 @@ pub(super) fn parse_select_query<'a>(mut walker: TokenWalker<'a, '_>) -> ParseRe
     }
     let table_name = table_name_token.to_string();
     let filter_expr = if let Some(TokenValue::Keyword(k)) = walker.peek_next()
-        && *k == "WHERE"
+        && *k == Keyword::Where
     {
         walker.skip(1);
         let end = walker.tokens().len();
@@ -144,14 +144,14 @@ pub(super) fn parse_select_query<'a>(mut walker: TokenWalker<'a, '_>) -> ParseRe
 }
 /// Parses CREATE TABLE query
 pub(super) fn parse_create_query<'a>(mut walker: TokenWalker<'a, '_>) -> ParseResult<'a, Query> {
-    walker.expect_next_token(&TokenValue::Keyword("CREATE"))?;
-    walker.expect_next_token(&TokenValue::Keyword("TABLE"))?;
+    walker.expect_next_token(&TokenValue::Keyword(Keyword::Create))?;
+    walker.expect_next_token(&TokenValue::Keyword(Keyword::Table))?;
 
     let mut if_not_exists = false;
     if let (
-        Some(TokenValue::Keyword("IF")),
-        Some(TokenValue::Keyword("NOT")),
-        Some(TokenValue::Keyword("EXISTS")),
+        Some(TokenValue::Keyword(Keyword::If)),
+        Some(TokenValue::Keyword(Keyword::Not)),
+        Some(TokenValue::Keyword(Keyword::Exists)),
     ) = (walker.peek_n(1), walker.peek_n(2), walker.peek_n(3))
     {
         if_not_exists = true;
@@ -236,21 +236,23 @@ pub(super) fn parse_field_modifier<'a>(
     let token = walker.next().ok_or(ParseError::UnexpectedEof)?;
     if let TokenValue::Keyword(ident) = token {
         match *ident {
-            "UNIQUE" => Ok(FieldModifier::Unique),
-            "AUTOINCREMENT" => Ok(FieldModifier::AutoIncrement),
-            "PRIMARY" => {
-                walker.expect_next_token(&TokenValue::Keyword("KEY"))?;
+            Keyword::Unique => Ok(FieldModifier::Unique),
+            Keyword::AutoIncrement => Ok(FieldModifier::AutoIncrement),
+            Keyword::Primary => {
+                walker.expect_next_token(&TokenValue::Keyword(Keyword::Key))?;
                 Ok(FieldModifier::PrimaryKey)
             }
-            "NOT" => {
-                walker.expect_next_token(&TokenValue::Keyword("NULL"))?;
+            Keyword::Not => {
+                walker.expect_next_token(&TokenValue::Keyword(Keyword::Null))?;
                 Ok(FieldModifier::NotNull)
             }
-            "DEFAULT" => {
+            Keyword::Default => {
                 let default_value = parse_literal(walker)?;
                 Ok(FieldModifier::Default(default_value))
             }
-            _ => Err(ParseError::UnknownModifier { modifier: ident }),
+            _ => Err(ParseError::UnknownModifier {
+                modifier: ident.as_str(),
+            }),
         }
     } else {
         Err(ParseError::UnknownModifier {
@@ -260,8 +262,8 @@ pub(super) fn parse_field_modifier<'a>(
 }
 /// Parses INSERT INTO query
 pub(super) fn parse_insert_query<'a>(mut walker: TokenWalker<'a, '_>) -> ParseResult<'a, Query> {
-    walker.expect_next_token(&TokenValue::Keyword("INSERT"))?;
-    walker.expect_next_token(&TokenValue::Keyword("INTO"))?;
+    walker.expect_next_token(&TokenValue::Keyword(Keyword::Insert))?;
+    walker.expect_next_token(&TokenValue::Keyword(Keyword::Into))?;
 
     let table_name = walker.next().ok_or(ParseError::UnexpectedEof)?;
     if !table_name.is_ident() {
@@ -273,7 +275,7 @@ pub(super) fn parse_insert_query<'a>(mut walker: TokenWalker<'a, '_>) -> ParseRe
     let table_name = table_name.to_string();
     let fields = parse_insert_fields(&mut walker)?;
 
-    walker.expect_next_token(&TokenValue::Keyword("VALUES"))?;
+    walker.expect_next_token(&TokenValue::Keyword(Keyword::Values))?;
 
     let mut insert_data = Vec::new();
     loop {
@@ -370,8 +372,8 @@ pub(super) fn parse_insert_data<'a>(
 }
 
 pub(super) fn parse_truncate_query<'a>(mut walker: TokenWalker<'a, '_>) -> ParseResult<'a, Query> {
-    walker.expect_next_token(&TokenValue::Keyword("TRUNCATE"))?;
-    walker.expect_next_token(&TokenValue::Keyword("TABLE"))?;
+    walker.expect_next_token(&TokenValue::Keyword(Keyword::Truncate))?;
+    walker.expect_next_token(&TokenValue::Keyword(Keyword::Table))?;
     let table_name_token = walker.next().ok_or(ParseError::UnexpectedEof)?;
     if table_name_token.starts_with_digit() || !table_name_token.is_ident() {
         return Err(ParseError::UnexpectedSymbol {
@@ -384,8 +386,8 @@ pub(super) fn parse_truncate_query<'a>(mut walker: TokenWalker<'a, '_>) -> Parse
 }
 
 pub(super) fn parse_drop_query<'a>(mut walker: TokenWalker<'a, '_>) -> ParseResult<'a, Query> {
-    walker.expect_next_token(&TokenValue::Keyword("DROP"))?;
-    walker.expect_next_token(&TokenValue::Keyword("TABLE"))?;
+    walker.expect_next_token(&TokenValue::Keyword(Keyword::Drop))?;
+    walker.expect_next_token(&TokenValue::Keyword(Keyword::Table))?;
     let table_name_token = walker.next().ok_or(ParseError::UnexpectedEof)?;
     if table_name_token.starts_with_digit() || !table_name_token.is_ident() {
         return Err(ParseError::UnexpectedSymbol {
@@ -398,8 +400,8 @@ pub(super) fn parse_drop_query<'a>(mut walker: TokenWalker<'a, '_>) -> ParseResu
 }
 
 pub(super) fn parse_delete_query<'a>(mut walker: TokenWalker<'a, '_>) -> ParseResult<'a, Query> {
-    walker.expect_next_token(&TokenValue::Keyword("DELETE"))?;
-    walker.expect_next_token(&TokenValue::Keyword("FROM"))?;
+    walker.expect_next_token(&TokenValue::Keyword(Keyword::Delete))?;
+    walker.expect_next_token(&TokenValue::Keyword(Keyword::From))?;
     let table_name_token = walker.next().ok_or(ParseError::UnexpectedEof)?;
     if table_name_token.starts_with_digit() || !table_name_token.is_ident() {
         return Err(ParseError::UnexpectedSymbol {
@@ -408,7 +410,7 @@ pub(super) fn parse_delete_query<'a>(mut walker: TokenWalker<'a, '_>) -> ParseRe
         });
     }
     let table_name = table_name_token.to_string();
-    walker.expect_next_token(&TokenValue::Keyword("WHERE"))?;
+    walker.expect_next_token(&TokenValue::Keyword(Keyword::Where))?;
     let end = walker.tokens().len();
     let expr = parse_expr(&mut walker, end)?;
     let del_query = DeleteQuery::DeleteRows(DeleteRows::new(table_name, expr));

@@ -20,7 +20,7 @@ fn criterion_benchmark(c: &mut Criterion) {
         })
     });
 
-    let value = TokenValue::Keyword("WHERE");
+    let value = TokenValue::Ident("Identifier");
     c.bench_function("to_string_cmp_str", |b| {
         b.iter(|| black_box(to_string_cmp_str(&value)))
     });
@@ -42,21 +42,21 @@ fn to_string_cmp_not_str(value: &TokenValue) -> bool {
     value.to_string() == "+"
 }
 fn to_string_cmp_str(value: &TokenValue) -> bool {
-    value.to_string() == "WHERE"
+    value.to_string() == "Identifier"
 }
 
 fn as_str_cmp_not_str(value: &TokenValue) -> bool {
     value.as_str() == "+"
 }
 fn as_str_cmp_str(value: &TokenValue) -> bool {
-    value.as_str() == "WHERE"
+    value.as_str() == "Identifier"
 }
 
 fn tokenvalue_cmp_not_str(value: &TokenValue) -> bool {
     value == &TokenValue::Sign(Sign::Plus)
 }
 fn tokenvalue_cmp_str(value: &TokenValue) -> bool {
-    value == &TokenValue::Ident("WHERE")
+    value == &TokenValue::Ident("Identifier")
 }
 
 criterion_group!(benches, criterion_benchmark);
