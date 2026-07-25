@@ -9,7 +9,6 @@ use crate::tokenizer::{Delimiter, Sign, TokenValue};
 pub enum ExpectExprErr<'a> {
     Before { symbol: &'a str },
     After { symbol: &'a str },
-    BeforeAfter { symbol: &'a str },
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ParseError<'a> {
@@ -45,6 +44,7 @@ pub type ParseResult<'a, T> = Result<T, ParseError<'a>>;
 #[derive(Debug, Clone)]
 pub struct TokenWalker<'a, 'b> {
     tokens: &'b [TokenValue<'a>],
+    /// Pointer position
     position: usize,
 }
 impl<'a, 'b> TokenWalker<'a, 'b> {
@@ -69,42 +69,48 @@ impl<'a, 'b> TokenWalker<'a, 'b> {
             position,
         }
     }
-    /// Gives n-th token
+    /// Returns n-th token from current walker position.
+    ///
+    /// If there's no token on that position returns `None`.
     pub fn peek_n(&self, n: usize) -> Option<&TokenValue<'a>> {
         self.tokens.get(self.position + n)
     }
 
+    /// Returns next token from current walker position and advances walker position.
+    ///
+    /// If there's no tokens left returns `None`.
     #[inline]
     pub fn next(&mut self) -> Option<&TokenValue<'a>> {
         self.position += 1;
         self.tokens.get(self.position)
     }
 
+    /// Returns next token from current walker pointer position and advances its position.
+    ///
+    /// If there's no token on next position returns `None`.
     #[inline]
     pub fn peek_next(&self) -> Option<&TokenValue<'a>> {
         self.tokens.get(self.position + 1)
     }
 
+    /// Returns current token.
+    ///
+    /// Returns `None` if current walker position is out of tokens range.
     #[inline]
     pub fn current_token(&self) -> Option<&TokenValue<'a>> {
         self.tokens.get(self.position)
     }
 
+    /// Skips n tokens.
     #[inline]
     pub fn skip(&mut self, n: usize) {
         self.position += n
     }
-    pub fn skip_until(&mut self, value: &TokenValue) -> Option<()> {
-        while let Some(token) = self.next() {
-            if token == value {
-                return Some(());
-            }
-        }
-        None
-    }
     /// Goes to the next non-blank token and compares it to the `expect_token`
     ///
-    /// Returns Err
+    /// # Errors:
+    /// - ParseError::UnexpectedEof, if there's no tokens left
+    /// - ParseError::UnexpectedSymbol, if token doesn't match `expect_token`
     #[inline]
     pub fn expect_next_token(&mut self, expect_token: &'a TokenValue) -> ParseResult<'a, ()> {
         let token = self.next().ok_or(ParseError::UnexpectedEof)?;
@@ -116,20 +122,18 @@ impl<'a, 'b> TokenWalker<'a, 'b> {
         }
         Ok(())
     }
+    /// Returns current walker pointer position.
     #[inline]
     pub fn position(&self) -> usize {
         self.position
     }
-    #[inline]
-    pub fn set_position(&mut self, new_position: usize) {
-        self.position = new_position;
-    }
+    /// Returns reference to slice of tokens.
     #[inline]
     pub fn tokens(&self) -> &[TokenValue<'a>] {
         &self.tokens
     }
 }
-
+/// Parses literals including numbers, strings, nulls and bools.
 pub fn parse_literal<'a>(walker: &mut TokenWalker<'a, '_>) -> ParseResult<'a, DataValue> {
     let token = walker.peek_next().ok_or(ParseError::UnexpectedEof)?;
     match token {
@@ -151,6 +155,7 @@ pub fn parse_literal<'a>(walker: &mut TokenWalker<'a, '_>) -> ParseResult<'a, Da
         }
     }
 }
+
 pub fn parse_bool_null_literal<'a>(walker: &mut TokenWalker<'a, '_>) -> ParseResult<'a, DataValue> {
     let token = walker.next().ok_or(ParseError::UnexpectedEof)?;
     if let TokenValue::Keyword(k) = token {
@@ -167,7 +172,7 @@ pub fn parse_bool_null_literal<'a>(walker: &mut TokenWalker<'a, '_>) -> ParseRes
         })
     }
 }
-/// Expects walker's pointer be beside literal symbol
+/// Expects walker's pointer be beside literal symbol.
 pub fn parse_number_literal<'a>(walker: &mut TokenWalker<'a, '_>) -> ParseResult<'a, DataValue> {
     let mut negative = false;
     let mut token = walker.next().ok_or(ParseError::UnexpectedEof)?;

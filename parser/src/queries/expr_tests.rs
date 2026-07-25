@@ -204,10 +204,25 @@ fn nested_arithmetic_with_parentheses() {
 }
 #[test]
 fn syntax_errors() {
-    assert!(parse!("5 +").is_err());
-    assert!(parse!("* 5").is_err());
-    assert!(parse!("(5 + 3").is_err()); // Missing closing bracket
-    assert!(parse!("5 5").is_err()); // Missing operator
+    assert_eq!(
+        parse!("5 + ").unwrap_err(),
+        ParseError::ExpectedExpr(ExpectExprErr::After { symbol: "+" })
+    );
+    assert_eq!(
+        parse!("* 5").unwrap_err(),
+        ParseError::ExpectedExpr(ExpectExprErr::Before { symbol: "*" })
+    );
+    assert_eq!(
+        parse!("(5 + 3").unwrap_err(),
+        ParseError::UnclosedBracket(')')
+    );
+    assert_eq!(
+        parse!("5 5").unwrap_err(),
+        ParseError::UnexpectedSymbol {
+            expected: "operator or end of expression",
+            given: "5",
+        }
+    );
 }
 #[test]
 fn test_bench_func() {
@@ -222,6 +237,7 @@ use storage::common_types::{ScalarType, ScalarValue};
 use storage::scalar;
 use storage::schema::{FieldType, Schema};
 
+use crate::{ExpectExprErr, ParseError};
 use crate::{common::TokenWalker, queries::expr::parse_expr, tokenizer::tokenize};
 
 /// First one is literal, second one is how it named in test

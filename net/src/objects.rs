@@ -169,7 +169,6 @@ impl From<ParseError<'_>> for ParseErrorDTO {
 pub enum ExpectExprErrDTO {
     Before { symbol: String },
     After { symbol: String },
-    BeforeAfter { symbol: String },
 }
 
 impl<'a> From<ExpectExprErr<'a>> for ExpectExprErrDTO {
@@ -179,9 +178,6 @@ impl<'a> From<ExpectExprErr<'a>> for ExpectExprErrDTO {
                 symbol: symbol.to_string(),
             },
             ExpectExprErr::After { symbol } => ExpectExprErrDTO::After {
-                symbol: symbol.to_string(),
-            },
-            ExpectExprErr::BeforeAfter { symbol } => ExpectExprErrDTO::BeforeAfter {
                 symbol: symbol.to_string(),
             },
         }

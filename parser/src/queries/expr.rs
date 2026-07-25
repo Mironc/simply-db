@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use query::expr::{ArithmeticOp, ComparisonOp, Expr, LiteralValue, LogicOp};
 
 use crate::common::{
-    ExpectExprErr, ParseError, ParseResult, TokenWalker, parse_bool_null_literal, parse_field_name,
+    ExpectExprErr, ParseError, TokenWalker, parse_bool_null_literal, parse_field_name,
     parse_number_literal,
 };
 
@@ -19,326 +19,189 @@ pub type ExprParseResult<'a, E> = Result<E, ParseError<'a>>;
 //     }
 // }
 /// Entry function for expression parsing.
-///
-/// Cleans input to exclude excessive non-meaningful tokens.
-/// Creates memoization table.
 pub fn parse_expr<'a, 'b>(
     walker: &mut TokenWalker<'a, '_>,
     end: usize,
 ) -> ExprParseResult<'a, Expr> {
-    let mut memo = Cache::default();
-    internal_parse_expr(walker, end, &mut memo)
-}
-/// From low priority to high priority
-const ORDER: [for<'a> fn(
-    &mut TokenWalker<'a, '_>,
-    usize,
-    &mut Cache<'a>,
-) -> ParseResult<'a, Expr>; 16] = [
-    parse_or,
-    parse_and,
-    parse_not,
-    parse_cmp_less,
-    parse_cmp_less_eq,
-    parse_cmp_greater,
-    parse_cmp_greater_eq,
-    parse_cmp_eq,
-    parse_cmp_neq,
-    parse_add,
-    parse_sub,
-    parse_mul,
-    parse_div,
-    parse_mod,
-    parse_brackets,
-    parse_literal_or_field,
-];
-/// Internal backtrack-recursive parsing function
-pub fn internal_parse_expr<'a>(
-    walker: &mut TokenWalker<'a, '_>,
-    end: usize,
-    memo: &mut Cache<'a>,
-) -> ExprParseResult<'a, Expr> {
-    let start = walker.position();
-    if let Some(err) = memo.get(&(start, end)) {
-        return Err(err.clone());
-    }
-    let res = try_parse_multiple(walker, end, memo, &ORDER);
-    if let Err(err) = &res {
-        memo.insert((start, end), err.clone());
-    }
-    res
-}
-/// Main function in expression parsing.
-/// Applies different patterns and if there's at least one success returns it
-pub fn try_parse_multiple<'a>(
-    walker: &mut TokenWalker<'a, '_>,
-    end: usize,
-    memo: &mut Cache<'a>,
-    parse: &[impl Fn(&mut TokenWalker<'a, '_>, usize, &mut Cache<'a>) -> ExprParseResult<'a, Expr>],
-) -> ExprParseResult<'a, Expr> {
-    let mut most_meaningful_err = None;
-    let mut max_consumed = 0;
-    for p_fn in parse.iter() {
-        let mut walker_copy = walker.clone_simple();
-        match p_fn(&mut walker_copy, end, memo) {
-            Ok(expr) => {
-                // Ensures that all tokens were taken
-                if walker_copy.position() == end - 1 {
-                    walker.set_position(walker_copy.position());
-                    return Ok(expr);
+    let expr = parse_or(walker, end)?;
+    if let Some(next_token) = walker.peek_next() {
+        match next_token {
+            TokenValue::Ident(_)
+            | TokenValue::TextLiteral(_)
+            | TokenValue::Keyword(_)
+            | TokenValue::Delimiter(Delimiter::RoundOpen) => {
+                if walker.position() != end - 1 {
+                    return Err(ParseError::UnexpectedSymbol {
+                        expected: "operator or end of expression",
+                        given: next_token.as_str(),
+                    });
                 }
             }
-            Err(e) => {
-                let current_pos = walker_copy.position();
-                if current_pos > max_consumed
-                    && e != ParseError::WrongPattern
-                    && e != ParseError::UnexpectedEof
-                {
-                    max_consumed = current_pos;
-                    most_meaningful_err = Some(e);
-                }
-            }
+            _ => {}
         }
     }
-    if let Some(e) = most_meaningful_err {
-        return Err(e);
-    }
-    Err(ParseError::UnknownPattern)
+    Ok(expr)
 }
-///
-pub fn parse_brackets<'a>(
-    walker: &mut TokenWalker<'a, '_>,
-    end: usize,
-    memo: &mut Cache<'a>,
-) -> ExprParseResult<'a, Expr> {
-    if end - walker.position() < 3 {
-        return Err(ParseError::WrongPattern);
-    }
-    let mut open = 0;
-    let mut closed = 0;
-    // Initially points to SOF
-    let mut first_bracket = 0;
+
+pub fn parse_or<'a>(walker: &mut TokenWalker<'a, '_>, end: usize) -> ExprParseResult<'a, Expr> {
+    let mut left = parse_and(walker, end)?;
+
     while walker.position() < end {
-        let token = walker.next().ok_or(ParseError::UnexpectedEof)?;
-        if token == &TokenValue::Delimiter(Delimiter::RoundOpen) {
-            let pos = walker.position();
-            if pos >= end {
+        if let Some(TokenValue::Keyword(k)) = walker.peek_next() {
+            if k == &"OR" {
+                walker.next(); // skip OR keyword
+                let right = parse_and(walker, end)?;
+                left = Expr::Logical(Box::new(LogicOp::Or(left, right)));
                 continue;
             }
-            let pos = walker.position();
-            open += 1;
-            if first_bracket == 0 {
-                first_bracket = pos;
-            }
-        } else if token == &TokenValue::Delimiter(Delimiter::RoundClose) {
-            let pos = walker.position();
-            if pos >= end {
-                continue;
-            }
-            if open == 0 {
-                return Err(ParseError::UnclosedBracket(')'));
-            }
-            open -= 1;
-            closed += 1;
-            if open == 0 && closed > 0 {
-                break;
-            }
         }
+        break;
     }
-    // All brackets are closed and atleast one pair of bracket was seen
-    if open == 0 && closed != 0 {
-        let mut expr = walker.clone_with_pos(first_bracket);
-        internal_parse_expr(&mut expr, walker.position(), memo)
-    } else {
-        if open != 0 {
-            Err(ParseError::UnclosedBracket('('))
-        } else {
-            Err(ParseError::WrongPattern)
-        }
-    }
+    Ok(left)
 }
 
-pub fn parse_not<'a>(
+pub fn parse_and<'a>(walker: &mut TokenWalker<'a, '_>, end: usize) -> ExprParseResult<'a, Expr> {
+    let mut left = parse_not(walker, end)?;
+
+    while walker.position() < end {
+        if let Some(TokenValue::Keyword(k)) = walker.peek_next() {
+            if k == &"AND" {
+                walker.next();
+                let right = parse_not(walker, end)?;
+                left = Expr::Logical(Box::new(LogicOp::And(left, right)));
+                continue;
+            }
+        }
+        break;
+    }
+    Ok(left)
+}
+
+pub fn parse_not<'a>(walker: &mut TokenWalker<'a, '_>, end: usize) -> ExprParseResult<'a, Expr> {
+    if let Some(TokenValue::Keyword(k)) = walker.peek_next() {
+        if k == &"NOT" {
+            walker.next();
+            let right = parse_not(walker, end)?;
+            return Ok(Expr::Logical(Box::new(LogicOp::Not(right))));
+        }
+    }
+    parse_comparison(walker, end)
+}
+
+pub fn parse_comparison<'a>(
     walker: &mut TokenWalker<'a, '_>,
     end: usize,
-    memo: &mut Cache<'a>,
 ) -> ExprParseResult<'a, Expr> {
-    // Comparing with 2 because it look like this (NOT, expr)
-    if end - walker.position() < 2 {
-        return Err(ParseError::WrongPattern);
+    let left = parse_add_sub(walker, end)?;
+
+    if walker.position() < end {
+        if let Some(TokenValue::Sign(s)) = walker.peek_next() {
+            let s = *s;
+
+            if matches!(
+                s,
+                Sign::Less | Sign::LessEq | Sign::Greater | Sign::GreaterEq | Sign::Eq | Sign::Neq
+            ) {
+                walker.next();
+                let right = parse_add_sub(walker, end)?;
+                return Ok(Expr::Comparison(Box::new(match s {
+                    Sign::Less => ComparisonOp::Less(left, right),
+                    Sign::LessEq => ComparisonOp::LessEq(left, right),
+                    Sign::Greater => ComparisonOp::Greater(left, right),
+                    Sign::GreaterEq => ComparisonOp::GreaterEq(left, right),
+                    Sign::Eq => ComparisonOp::Eq(left, right),
+                    Sign::Neq => ComparisonOp::NotEq(left, right),
+                    _ => unreachable!(),
+                })));
+            }
+        }
     }
+    Ok(left)
+}
+
+pub fn parse_add_sub<'a>(
+    walker: &mut TokenWalker<'a, '_>,
+    end: usize,
+) -> ExprParseResult<'a, Expr> {
+    let mut left = parse_mul_div_mod(walker, end)?;
+
     while walker.position() < end {
-        let token = walker.next().ok_or(ParseError::UnexpectedEof)?;
-        if token == &TokenValue::Keyword("NOT".into()) {
-            let pos = walker.position();
-            if pos >= end {
+        if let Some(TokenValue::Sign(s)) = walker.peek_next() {
+            let s = *s;
+            if matches!(s, Sign::Plus | Sign::Minus) {
+                walker.next();
+                let right = parse_mul_div_mod(walker, end).map_err(|e| {
+                    if let ParseError::UnexpectedEof = e {
+                        ParseError::ExpectedExpr(ExpectExprErr::After { symbol: s.as_str() })
+                    } else {
+                        e
+                    }
+                })?;
+                left = Expr::Arithmetic(Box::new(match s {
+                    Sign::Plus => ArithmeticOp::Add(left, right),
+                    Sign::Minus => ArithmeticOp::Subtract(left, right),
+                    _ => unreachable!(),
+                }));
                 continue;
             }
-            if let Ok(expr) = internal_parse_expr(walker, end, memo) {
-                return Ok(Expr::Logical(Box::new(LogicOp::Not(expr))));
-            }
         }
+        break;
     }
-    Err(ParseError::WrongPattern)
+    Ok(left)
 }
-//316 lines into just 50, how neat
-macro_rules! parse_binary {
-    ($fn_name:ident,$expr_enum_variant:ident,$construct_variant:expr,$match_token:expr) => {
-        #[doc = concat!("Finds every entry of `", stringify!($match_token), "` and tries to parse until success.")]
-        ///
-        /// If goes to end and nothing succeeded returns `Err`
-        ///
-        /// Doc was created automatically.
-        pub fn $fn_name<'a>(
-            walker: &mut TokenWalker<'a,'_>,
-            end: usize,
-            memo: &mut Cache<'a>,
-        ) -> ExprParseResult<'a, Expr> {
-            let start = walker.position();
-            // comparing with 3 because it looks like this (Expr, Matching Symb, Expr)
-            if end - start < 3{
-                return Err(ParseError::WrongPattern)
-            }
-            let mut most_meaningful_err = None;
-            let mut max_consumed = start;
-            while walker.position() < end {
-                let token = if let Some(token) = walker.next(){
-                    token
-                }
-                else{
-                    break;
-                };
-                if token == &$match_token {
-                    let pos = walker.position();
-                    if pos >= end {
-                        continue;
-                    }
-                    let mut lhs = walker.clone_with_pos(start);
-                    let mut rhs = walker.clone_simple();
-                    let lhs_expr = internal_parse_expr(&mut lhs, walker.position(), memo);
-                    let rhs_expr = internal_parse_expr(&mut rhs, end, memo);
-                    walker.set_position(rhs.position());
-                    let current_pos = walker.position();
-                    match (lhs_expr, rhs_expr){
-                        (Ok(lhs), Ok(rhs)) =>{
-                            return Ok(Expr::$expr_enum_variant(Box::new($construct_variant(
-                                lhs, rhs,
-                            ))));
-                        }
-                        (Err(_), Err(_)) => {
-                            if current_pos > max_consumed {
-                                max_consumed = current_pos;
-                                most_meaningful_err = Some(ParseError::ExpectedExpr(ExpectExprErr::BeforeAfter{symbol:$match_token.as_str()}));
-                            }
-                        }
-                        (Err(_), _) => {
-                            if current_pos > max_consumed  {
-                                max_consumed = current_pos;
-                                most_meaningful_err = Some(ParseError::ExpectedExpr(ExpectExprErr::Before{symbol:$match_token.as_str()}));
-                            }
-                        }
-                        (_, Err(_)) => {
-                            if current_pos > max_consumed  {
-                                max_consumed = current_pos;
-                                most_meaningful_err = Some(ParseError::ExpectedExpr(ExpectExprErr::After{symbol:$match_token.as_str()}));
-                            }
-                        }
-                    }
 
-                }
+pub fn parse_mul_div_mod<'a>(
+    walker: &mut TokenWalker<'a, '_>,
+    end: usize,
+) -> ExprParseResult<'a, Expr> {
+    let mut left = parse_primary(walker, end)?;
+
+    while walker.position() < end {
+        if let Some(TokenValue::Sign(s)) = walker.peek_next() {
+            let s = *s;
+            if matches!(s, Sign::Asterisk | Sign::Slash | Sign::Percent) {
+                walker.next();
+                let right = parse_primary(walker, end).map_err(|e| {
+                    if let ParseError::UnexpectedEof = e {
+                        ParseError::ExpectedExpr(ExpectExprErr::After { symbol: s.as_str() })
+                    } else {
+                        e
+                    }
+                })?;
+                left = Expr::Arithmetic(Box::new(match s {
+                    Sign::Asterisk => ArithmeticOp::Multiply(left, right),
+                    Sign::Slash => ArithmeticOp::Divide(left, right),
+                    Sign::Percent => ArithmeticOp::Modulo(left, right),
+                    _ => unreachable!(),
+                }));
+                continue;
             }
-            if let Some(e) = most_meaningful_err {
-                return Err(e);
-            }
-            Err(ParseError::WrongPattern)
         }
-    };
+        break;
+    }
+    Ok(left)
 }
+pub fn parse_primary<'a>(
+    walker: &mut TokenWalker<'a, '_>,
+    end: usize,
+) -> ExprParseResult<'a, Expr> {
+    if let Some(TokenValue::Delimiter(Delimiter::RoundOpen)) = walker.peek_next() {
+        walker.next();
+        let expr = parse_or(walker, end)?;
+        let closing = walker.next().ok_or(ParseError::UnclosedBracket(')'))?;
+        if closing != &TokenValue::Delimiter(Delimiter::RoundClose) {
+            return Err(ParseError::UnclosedBracket(')'));
+        }
+        return Ok(expr);
+    }
 
-parse_binary!(
-    parse_add,
-    Arithmetic,
-    ArithmeticOp::Add,
-    TokenValue::Sign(Sign::Plus)
-);
-parse_binary!(
-    parse_sub,
-    Arithmetic,
-    ArithmeticOp::Subtract,
-    TokenValue::Sign(Sign::Minus)
-);
-parse_binary!(
-    parse_div,
-    Arithmetic,
-    ArithmeticOp::Divide,
-    TokenValue::Sign(Sign::Slash)
-);
-parse_binary!(
-    parse_mul,
-    Arithmetic,
-    ArithmeticOp::Multiply,
-    TokenValue::Sign(Sign::Asterisk)
-);
-parse_binary!(
-    parse_mod,
-    Arithmetic,
-    ArithmeticOp::Modulo,
-    TokenValue::Sign(Sign::Percent)
-);
-parse_binary!(
-    parse_cmp_less,
-    Comparison,
-    ComparisonOp::Less,
-    TokenValue::Sign(Sign::Less)
-);
-parse_binary!(
-    parse_cmp_less_eq,
-    Comparison,
-    ComparisonOp::LessEq,
-    TokenValue::Sign(Sign::LessEq)
-);
-parse_binary!(
-    parse_cmp_greater,
-    Comparison,
-    ComparisonOp::Greater,
-    TokenValue::Sign(Sign::Greater)
-);
-parse_binary!(
-    parse_cmp_greater_eq,
-    Comparison,
-    ComparisonOp::GreaterEq,
-    TokenValue::Sign(Sign::GreaterEq)
-);
-parse_binary!(
-    parse_cmp_eq,
-    Comparison,
-    ComparisonOp::Eq,
-    TokenValue::Sign(Sign::Eq)
-);
-parse_binary!(
-    parse_cmp_neq,
-    Comparison,
-    ComparisonOp::NotEq,
-    TokenValue::Sign(Sign::Neq)
-);
-parse_binary!(
-    parse_and,
-    Logical,
-    LogicOp::And,
-    TokenValue::Keyword("AND".into())
-);
-parse_binary!(
-    parse_or,
-    Logical,
-    LogicOp::Or,
-    TokenValue::Keyword("OR".into())
-);
+    parse_literal_or_field(walker, end)
+}
 
 /// I guess it's pretty self-explanatory
 pub fn parse_literal_or_field<'a>(
     walker: &mut TokenWalker<'a, '_>,
     _: usize,
-    _: &mut Cache<'a>,
 ) -> ExprParseResult<'a, Expr> {
     let token = walker.peek_next().ok_or(ParseError::UnexpectedEof)?;
     match token {
@@ -362,15 +225,30 @@ pub fn parse_literal_or_field<'a>(
                 LiteralValue::from_value(parse_number_literal(walker)?)
                     .expect("Got non-number output from parse_number_literal() function"),
             )),
-            _ => Err(ParseError::UnexpectedSymbol {
-                expected: "literal or field access",
-                given: token.as_str(),
-            }),
+            s => match s {
+                Sign::Plus | Sign::Minus | Sign::Asterisk | Sign::Slash | Sign::Percent => {
+                    Err(ParseError::ExpectedExpr(ExpectExprErr::Before {
+                        symbol: token.as_str(),
+                    }))
+                }
+                _ => Err(ParseError::UnexpectedSymbol {
+                    expected: "literal or field access",
+                    given: token.as_str(),
+                }),
+            },
         },
-        TokenValue::Keyword(_) => Ok(Expr::Literal(
-            LiteralValue::from_value(parse_bool_null_literal(walker)?)
-                .expect("Got non-bool, non-null output from parse_bool_null_literal() function"),
-        )),
+        TokenValue::Keyword(keyword) => {
+            if *keyword == "AND" || *keyword == "OR" {
+                return Err(ParseError::ExpectedExpr(ExpectExprErr::Before {
+                    symbol: token.as_str(),
+                }));
+            }
+            Ok(Expr::Literal(
+                LiteralValue::from_value(parse_bool_null_literal(walker)?).expect(
+                    "Got non-bool, non-null output from parse_bool_null_literal() function",
+                ),
+            ))
+        }
         TokenValue::TextLiteral(text) => {
             let lit_value = LiteralValue::Text((*text).to_owned());
             walker.skip(1);
