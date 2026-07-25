@@ -26,8 +26,11 @@ impl Record {
         vec!["id".to_owned(), "name".to_owned(), "email".to_owned()]
     }
 }
-pub fn read_records() -> Vec<Record> {
-    let data = include_str!("MOCK_DATA.csv");
+pub fn load_records() -> Vec<Record> {
+    let data = include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../mock_data/USER_10K.csv"
+    ));
     csv::Reader::from_reader(data.as_bytes())
         .into_deserialize::<Record>()
         .filter_map(|x| if let Ok(x) = x { Some(x) } else { None })

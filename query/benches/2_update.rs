@@ -1,7 +1,7 @@
 mod formatter;
 use crate::{
     formatter::WallTimeQps,
-    setup::{init_db, insert_records, read_records},
+    setup::{init_db, insert_records, load_records},
 };
 mod setup;
 use criterion::{BatchSize, Criterion, Throughput, criterion_group, criterion_main};
@@ -23,7 +23,7 @@ fn update_rows(db: &mut Database) -> Result<(), UpdateError> {
     query.execute(db)
 }
 fn criterion_benchmark(c: &mut Criterion<WallTimeQps>) {
-    let records = read_records();
+    let records = load_records();
     let db = init_db();
     insert_records(&db, &records);
     let mut group = c.benchmark_group("update");

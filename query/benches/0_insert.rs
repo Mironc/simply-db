@@ -5,7 +5,7 @@ use criterion::{BatchSize, Criterion, Throughput, criterion_group, criterion_mai
 use query::queries::insert::InsertQuery;
 use storage::db::Database;
 
-use crate::setup::{Record, init_db, init_db_unique, read_records};
+use crate::setup::{Record, init_db, init_db_unique, load_records};
 
 fn insert_by_one(db: &mut Database, records: &[Record]) {
     for record in records {
@@ -26,7 +26,7 @@ fn insert_batch(db: &mut Database, records: &[Record]) {
     insert_query.execute(db).unwrap();
 }
 fn criterion_benchmark(c: &mut Criterion) {
-    let records = read_records();
+    let records = load_records();
     let batch_size = records.len() as u64;
     if batch_size == 0 {
         panic!("Expected dataset with more than 0 elements or file was corrupted");

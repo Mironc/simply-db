@@ -9,7 +9,7 @@ use storage::{common_types::DataValue, db::Database};
 
 use crate::{
     formatter::WallTimeQps,
-    setup::{init_db, insert_records, read_records},
+    setup::{init_db, insert_records, load_records},
 };
 
 fn select_rows(db: &mut Database) -> Result<Vec<Vec<DataValue>>, SelectError> {
@@ -47,7 +47,7 @@ fn select_where_projection(db: &mut Database) -> Result<Vec<Vec<DataValue>>, Sel
     query.execute(db)
 }
 fn criterion_benchmark(c: &mut Criterion<WallTimeQps>) {
-    let records = read_records();
+    let records = load_records();
     let db = init_db();
     insert_records(&db, &records);
     let mut group = c.benchmark_group("select");
