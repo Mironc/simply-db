@@ -1,3 +1,24 @@
+//! # Token Comparison Performance Benchmarks
+//!
+//! ## TL;DR
+//! - Don't use `.to_string()` or `.as_str()` for comparison; prefer direct enum comparison.
+//! - Use `.to_string()` and `.as_str()` only when absolutely necessary.
+//!
+//! ### Purpose
+//! This benchmark quantifies the performance impact of different string and enum
+//! comparison strategies for `TokenValue`. It serves as a guardrail against
+//! accidental performance regressions in hot parsing/lexing loops.
+//!
+//! ### Why This Matters
+//! 1. `to_string()` triggers dynamic heap allocations (`String`), which are slow.
+//! 2. `as_str()` borrows a reference (`&str`), avoiding allocation.
+//! 3. Direct enum comparison (`TokenValue == TokenValue`) is a simple enum variant match.
+//!
+//! ### Expected Results
+//! * `tokenvalue_cmp_*` -> Fastest (picoseconds)
+//! * `as_str_cmp_*`     -> Fast (picoseconds, but slightly worse than tokenvalue_cmp)
+//! * `to_string_cmp_*`  -> Slowest (nanoseconds)
+
 use criterion::{Criterion, criterion_group, criterion_main};
 use parser::tokenizer::{Sign, TokenValue};
 use std::hint::black_box;
