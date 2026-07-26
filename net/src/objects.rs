@@ -125,6 +125,9 @@ pub enum ParseErrorDTO {
         message: String,
     },
     IdentStartsWithNumber,
+    UnsupportedCharacter {
+        character: char,
+    },
 }
 #[cfg(feature = "server")]
 impl axum::response::IntoResponse for ParseErrorDTO {
@@ -160,6 +163,9 @@ impl From<ParseError<'_>> for ParseErrorDTO {
                 message: message.to_string(),
             },
             ParseError::IdentStartsWithNumber => ParseErrorDTO::IdentStartsWithNumber,
+            ParseError::UnsupportedCharacter { character } => {
+                ParseErrorDTO::UnsupportedCharacter { character }
+            }
         }
     }
 }

@@ -6,18 +6,19 @@ use parser::tokenizer::tokenize;
 fn criterion_benchmark(c: &mut Criterion) {
     let mut group = c.benchmark_group("tokenize query");
 
-    // FIX(perf): Why is it so much slower than other queries.
     let query = "INSERT INTO sometablename (id, name) VALUES (0,'Steve')";
     group.throughput(Throughput::Bytes(query.len() as u64));
-    group.bench_function("insert", |b| b.iter(|| black_box(tokenize(query))));
+    group.bench_function("insert", |b| b.iter(|| black_box(tokenize(query).unwrap())));
 
     let query = "CREATE TABLE IF NOT EXISTS sometablename (id INT PRIMARY KEY, name TEXT NOT NULL)";
     group.throughput(Throughput::Bytes(query.len() as u64));
-    group.bench_function("create table", |b| b.iter(|| black_box(tokenize(query))));
+    group.bench_function("create table", |b| {
+        b.iter(|| black_box(tokenize(query).unwrap()))
+    });
 
     let query = "SELECT * FROM sometablename WHERE id == 0 AND name == 'Steve'";
     group.throughput(Throughput::Bytes(query.len() as u64));
-    group.bench_function("select", |b| b.iter(|| black_box(tokenize(query))));
+    group.bench_function("select", |b| b.iter(|| black_box(tokenize(query).unwrap())));
 
     group.finish();
 

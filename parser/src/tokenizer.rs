@@ -169,8 +169,6 @@ macro_rules! implement_special_character {
 
 implement_special_character!(
     Delimiter,
-    (CurlyOpen, "{"),
-    (CurlyClose, "}"),
     (RoundOpen, "("),
     (RoundClose, ")"),
     (BlockOpen, "["),
@@ -178,10 +176,7 @@ implement_special_character!(
     //(Apostrophe, "'"), Reserved for TextLiteral
     (Comma, ","),
     (Dot, "."),
-    (Semicolon, ";"),
-    (Backtick, "`"),
-    (DoubleQuote, "\""),
-    (Colon, ":")
+    (DoubleQuote, "\"")
 );
 
 implement_special_character!(
@@ -198,82 +193,168 @@ implement_special_character!(
     (Slash, "/"),
     (Set, "="),
     (Percent, "%"),
-    (Tilda, "~"),
-    (ExclamationMark, "!"),
-    (At, "@"),
-    (Hash, "#"),
-    (Question, "?"),
-    (Dollar, "$"),
-    (Caret, "^"),
-    (Ampersand, "&"),
-    (Number, "№"),
-    //(Underscore, "_"), it's a valid ident character, so its better to skip
-    (Pipe, "|")
+    // (Underscore, "_"), it's a valid ident character, so its better to skip
+    (Dollar, "$")
 );
 
+#[inline(always)]
+fn next_utf8_code_point(bytes: &[u8], pos: usize) -> (u32, usize) {
+    let b1 = *unsafe { bytes.get_unchecked(pos) };
+
+    if b1 < 0x80 {
+        return (b1 as u32, 1);
+    }
+
+    if b1 & 0xE0 == 0xC0 && pos + 1 < bytes.len() {
+        let b2 = *unsafe { bytes.get_unchecked(pos + 1) };
+        let code = ((b1 & 0x1F) as u32) << 6 | (b2 & 0x3F) as u32;
+        return (code, 2);
+    }
+
+    if b1 & 0xF0 == 0xE0 && pos + 2 < bytes.len() {
+        let b2 = *unsafe { bytes.get_unchecked(pos + 1) };
+        let b3 = *unsafe { bytes.get_unchecked(pos + 2) };
+        let code = ((b1 & 0x0F) as u32) << 12 | ((b2 & 0x3F) as u32) << 6 | (b3 & 0x3F) as u32;
+        return (code, 3);
+    }
+
+    if b1 & 0xF8 == 0xF0 && pos + 3 < bytes.len() {
+        let b2 = *unsafe { bytes.get_unchecked(pos + 1) };
+        let b3 = *unsafe { bytes.get_unchecked(pos + 2) };
+        let b4 = *unsafe { bytes.get_unchecked(pos + 3) };
+        let code = ((b1 & 0x07) as u32) << 18
+            | ((b2 & 0x3F) as u32) << 12
+            | ((b3 & 0x3F) as u32) << 6
+            | (b4 & 0x3F) as u32;
+        return (code, 4);
+    }
+
+    (b1 as u32, 1)
+}
+#[inline(always)]
+fn is_valid_identifier_char(c: char) -> bool {
+    // ascii, should be alphanumeric or '_'
+    if c.is_ascii() {
+        return c.is_ascii_alphanumeric() || c == '_';
+    }
+
+    // Should be alphanumeric
+    if !c.is_alphabetic() && !c.is_numeric() {
+        return false;
+    }
+
+    // Remove unicode codepoint blocks (modifiers, fractions, superscripts, subscripts, rare signs)
+    match c as u32 {
+        // Latin-1 Supplement
+        0x0080..=0x00FF => c.is_alphabetic() && (c as u32 != 0xAA) && (c as u32 != 0xBA),
+        // Spacing Modifier Letters
+        0x02B0..=0x02FF => false,
+        // Phonetic Extensions
+        0x1D00..=0x1D7F => false,
+        // Superscripts and subscripts
+        0x2070..=0x209F => false,
+        // Number forms
+        0x2150..=0x218F => false,
+        _ => true,
+    }
+}
 /// Turns string into vector of tokens
 pub fn tokenize<'a>(source: &'a str) -> Result<Vec<TokenValue<'a>>, ParseError<'a>> {
     let source = source.trim();
-    let mut char_ind = source.char_indices().peekable();
+    let bytes = source.as_bytes();
     let mut tokens = Vec::with_capacity(50);
     tokens.push(TokenValue::SOF);
-    while let Some(&(ind, char)) = char_ind.peek() {
-        if char.is_whitespace() {
-            char_ind.next();
+    let mut i = 0;
+    while i < bytes.len() {
+        let b = *unsafe { bytes.get_unchecked(i) };
+        // Skip whitespaces
+        if b.is_ascii_whitespace() {
+            i += 1;
             continue;
         }
-        if char == '\'' {
-            char_ind.next();
-            let start = ind + char.len_utf8();
-            let mut end = start;
-            while let Some(&(ind, c)) = char_ind.peek()
-                && c != '\''
-            {
-                end = ind + c.len_utf8();
-                char_ind.next();
+        // Text literal, includes any utf-8 characters
+        if b == b'\'' {
+            i += 1;
+            let start = i;
+            // Skip until end or another apostrophe
+            while i < bytes.len() && *unsafe { bytes.get_unchecked(i) } != b'\'' {
+                i += 1;
             }
-            if let Some((_, c)) = char_ind.next()
-                && c == '\''
-            {
-                tokens.push(TokenValue::TextLiteral(&source[start..end]));
+            // Check if literal ends with apostrophe
+            if i < bytes.len() && *unsafe { bytes.get_unchecked(i) } == b'\'' {
+                let literal = unsafe { str::from_utf8_unchecked(&bytes[start..i]) };
+                tokens.push(TokenValue::TextLiteral(literal));
+                i += 1;
                 continue;
             } else {
                 return Err(ParseError::UnclosedBracket('\''));
             }
         }
-        if !char.is_alphanumeric() && !char.is_whitespace() && char != '_' {
-            let start_ind = ind;
-            char_ind.next();
-            if let Some(&(end_ind, c)) = char_ind.peek() {
-                if let Some(token) = Sign::from_str(&source[start_ind..end_ind + c.len_utf8()]) {
-                    tokens.push(TokenValue::Sign(token));
-                    char_ind.next();
-                    continue;
-                }
-            }
-            if let Some(token) = Sign::from_str(&source[start_ind..start_ind + char.len_utf8()]) {
-                tokens.push(TokenValue::Sign(token));
-                continue;
-            }
-            if let Some(token) =
-                Delimiter::from_str(&source[start_ind..start_ind + char.len_utf8()])
-            {
-                tokens.push(TokenValue::Delimiter(token));
+
+        // Handle special characters (non-alphanumeric, excluding underscores).
+        // We only check ASCII since all valid delimiters and signs are ASCII.
+        if !b.is_ascii_alphanumeric() && b != b'_' {
+            let word = if i + 1 < bytes.len() {
+                [b, *unsafe { bytes.get_unchecked(i + 1) }]
+            } else {
+                [b, 0]
+            };
+            let token_match = match &word {
+                b"==" => Some((TokenValue::Sign(Sign::Eq), 2)),
+                b"!=" => Some((TokenValue::Sign(Sign::Neq), 2)),
+                b"<=" => Some((TokenValue::Sign(Sign::LessEq), 2)),
+                b">=" => Some((TokenValue::Sign(Sign::GreaterEq), 2)),
+                _ => match b {
+                    b'<' => Some((TokenValue::Sign(Sign::Less), 1)),
+                    b'>' => Some((TokenValue::Sign(Sign::Greater), 1)),
+                    b'+' => Some((TokenValue::Sign(Sign::Plus), 1)),
+                    b'-' => Some((TokenValue::Sign(Sign::Minus), 1)),
+                    b'*' => Some((TokenValue::Sign(Sign::Asterisk), 1)),
+                    b'/' => Some((TokenValue::Sign(Sign::Slash), 1)),
+                    b'=' => Some((TokenValue::Sign(Sign::Set), 1)),
+                    b'%' => Some((TokenValue::Sign(Sign::Percent), 1)),
+                    b'$' => Some((TokenValue::Sign(Sign::Dollar), 1)),
+                    b'(' => Some((TokenValue::Delimiter(Delimiter::RoundOpen), 1)),
+                    b')' => Some((TokenValue::Delimiter(Delimiter::RoundClose), 1)),
+                    b'[' => Some((TokenValue::Delimiter(Delimiter::BlockOpen), 1)),
+                    b']' => Some((TokenValue::Delimiter(Delimiter::BlockClose), 1)),
+                    b',' => Some((TokenValue::Delimiter(Delimiter::Comma), 1)),
+                    b'.' => Some((TokenValue::Delimiter(Delimiter::Dot), 1)),
+                    b'"' => Some((TokenValue::Delimiter(Delimiter::DoubleQuote), 1)),
+                    _ => None,
+                },
+            };
+            if let Some((token, size)) = token_match {
+                tokens.push(token);
+                i += size;
                 continue;
             }
         }
-        let start = ind;
-        let mut end = ind;
-        while let Some(&(ind, c)) = char_ind.peek()
-            && (c.is_alphanumeric() || c == '_')
-        {
-            end = ind + c.len_utf8();
-            char_ind.next();
+        // Identifiers
+        let start = i;
+        while i < source.len() {
+            let (codepoint, size) = next_utf8_code_point(bytes, i);
+            let char = unsafe { char::from_u32_unchecked(codepoint) };
+            if is_valid_identifier_char(char) {
+                i += size;
+            } else if char.is_ascii() {
+                break;
+            } else {
+                return Err(ParseError::UnsupportedCharacter { character: char });
+            }
         }
-        if let Some(keyword) = Keyword::from_str(&source[start..end]) {
+        if start == i {
+            let (codepoint, _) = next_utf8_code_point(bytes, i);
+            let unknown_char = unsafe { char::from_u32_unchecked(codepoint) };
+
+            return Err(ParseError::UnsupportedCharacter {
+                character: unknown_char,
+            });
+        }
+        if let Some(keyword) = Keyword::from_str(&source[start..i]) {
             tokens.push(TokenValue::Keyword(keyword));
         } else {
-            tokens.push(TokenValue::Ident(&source[start..end]));
+            tokens.push(TokenValue::Ident(&source[start..i]));
         }
     }
     Ok(tokens)
@@ -427,10 +508,15 @@ mod tests {
     }
 
     #[test]
-    fn all_special_characters() {
-        let string = "~`!@#$%^&*()-+={[}]|:;<,>.?/\"";
-        let tokenized = tokenize(string).unwrap();
-        // -1 to remove SOF token
-        assert_eq!(tokenized.len() - 1, string.len())
+    fn unsupported_characters() {
+        let string = "~`@#^&{}|?\\¢£¤¥¦§¨©«¬®¯°±²³´¶·¸¹º»¼½¾¿×÷±∓√∛∜∝∞∟∠∡∢∣∤∥∦∧∨∩∪∴∵∶∷∸∹∺∻∼∽∾∿≀≁≂≃≄≅≆≇≈≉≊≋≌≍≎≏≐≑≒≓≔≕≖≗≘≙≚≛≜≝≞≟≠≡≢≣≤≥≦≧≨≩≪≫≬≭≮≯≰≱≲≳≴≵≶≷≸≹≺≻≼≽≾≿⊀⊁⊂⊃⊄⊅⊆⊇⊈⊉⊊⊋⊌⊍⊎⊏⊐⊑⊒⊓⊔⊕⊖⊗⊘⊙⊚⊛⊜⊝⊞⊟⊠⊡⊢⊣⊤⊥⊦⊧⊨⊩⊪⊫⊬⊭⊮⊯⊰⊱⊲⊳⊴⊵⊶⊷⊸⊹⊺⊻⊼⊽⊾⊿⋀⋁⋂⋃⋄⋅⋆⋇⋈⋉⋊⋋⋌⋍⋎⋏⋐⋑⋒⋓⋔⋕⋖⋗⋘⋙⋚⋛⋜⋝⋞⋟⋠⋡⋢⋣⋤⋥⋦⋧⋨⋩⋪⋫⋬⋭⋮⋯⋰⋱";
+        for c in string.chars() {
+            let as_str = format!("{}", c);
+            let tokenized = tokenize(&as_str);
+            assert_eq!(
+                tokenized.unwrap_err(),
+                ParseError::UnsupportedCharacter { character: c }
+            )
+        }
     }
 }

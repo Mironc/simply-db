@@ -37,6 +37,9 @@ pub enum ParseError<'a> {
     Other {
         message: &'a str,
     },
+    UnsupportedCharacter {
+        character: char,
+    },
     IdentStartsWithNumber,
 }
 pub type ParseResult<'a, T> = Result<T, ParseError<'a>>;
@@ -140,7 +143,6 @@ pub fn parse_literal<'a>(walker: &mut TokenWalker<'a, '_>) -> ParseResult<'a, Da
         TokenValue::Ident(_) => parse_number_literal(walker),
         TokenValue::Sign(_) => parse_number_literal(walker),
         TokenValue::Delimiter(delim) => match delim {
-            Delimiter::CurlyOpen => todo!("IDK"),
             Delimiter::RoundOpen => todo!("Maybe structures in the future"),
             Delimiter::BlockOpen => todo!("Maybe arrays in the future"),
             Delimiter::Dot => parse_number_literal(walker),
