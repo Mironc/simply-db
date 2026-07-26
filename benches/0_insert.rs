@@ -43,9 +43,10 @@ fn insert_batch(db: &Database, records: &[Record]) {
 }
 fn criterion_benchmark(c: &mut Criterion<WallTimeQps>) {
     let records = setup::load_records();
+    let batch_size = records.len() as u64;
     let mut group = c.benchmark_group("insert");
     // Makes 10000 unique queries
-    group.throughput(Throughput::Elements(10000));
+    group.throughput(Throughput::Elements(batch_size));
     group.bench_function("single", |b| {
         b.iter_batched_ref(
             || init_db(),
@@ -53,7 +54,7 @@ fn criterion_benchmark(c: &mut Criterion<WallTimeQps>) {
             BatchSize::PerIteration,
         );
     });
-    // Each query inserts 10000 objects, but it still one query
+    // Each query inserts 1000 objects, but it still one query
     group.throughput(Throughput::Elements(1));
     group.bench_function("batch", |b| {
         b.iter_batched_ref(
@@ -66,7 +67,7 @@ fn criterion_benchmark(c: &mut Criterion<WallTimeQps>) {
 
     let mut group = c.benchmark_group("insert_unique");
     // Makes 10000 unique queries
-    group.throughput(Throughput::Elements(10000));
+    group.throughput(Throughput::Elements(batch_size));
     group.bench_function("single", |b| {
         b.iter_batched_ref(
             || init_db_unique(),
@@ -74,7 +75,7 @@ fn criterion_benchmark(c: &mut Criterion<WallTimeQps>) {
             BatchSize::PerIteration,
         );
     });
-    // Each query inserts 10000 objects, but it still one query
+    // Each query inserts 1000 objects, but it still one query
     group.throughput(Throughput::Elements(1));
     group.bench_function("batch", |b| {
         b.iter_batched_ref(

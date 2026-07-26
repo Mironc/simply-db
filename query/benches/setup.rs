@@ -29,7 +29,7 @@ impl Record {
 pub fn load_records() -> Vec<Record> {
     let data = include_str!(concat!(
         env!("CARGO_MANIFEST_DIR"),
-        "/../mock_data/USER_10K.csv"
+        "/../mock_data/USER_1K.csv"
     ));
     csv::Reader::from_reader(data.as_bytes())
         .into_deserialize::<Record>()
