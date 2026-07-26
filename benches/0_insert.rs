@@ -1,5 +1,7 @@
 mod formatter;
 mod setup;
+use std::str::FromStr;
+
 use criterion::{BatchSize, Criterion, Throughput, criterion_group, criterion_main};
 use parser::parse_query_request;
 use storage::db::Database;
@@ -21,7 +23,7 @@ fn insert_single(db: &Database, records: &[Record]) {
     }
 }
 fn insert_batch(db: &Database, records: &[Record]) {
-    let mut values = String::with_capacity(records.len() * 50);
+    let mut values = String::from_str("INSERT INTO users (id, name, email) VALUES").unwrap();
 
     for (i, record) in records.iter().enumerate() {
         if i > 0 {
@@ -33,11 +35,7 @@ fn insert_batch(db: &Database, records: &[Record]) {
         );
     }
 
-    let q_req = parse_query_request(&format!(
-        "INSERT INTO users (id, name, email) VALUES {}",
-        values
-    ))
-    .unwrap();
+    let q_req = parse_query_request(&values).unwrap();
 
     q_req.execute(db).iter().for_each(|x| {
         x.as_ref().unwrap();
@@ -46,7 +44,8 @@ fn insert_batch(db: &Database, records: &[Record]) {
 fn criterion_benchmark(c: &mut Criterion<WallTimeQps>) {
     let records = setup::load_records();
     let mut group = c.benchmark_group("insert");
-    group.throughput(Throughput::Elements(1));
+    // Makes 10000 unique queries
+    group.throughput(Throughput::Elements(10000));
     group.bench_function("single", |b| {
         b.iter_batched_ref(
             || init_db(),
@@ -54,6 +53,8 @@ fn criterion_benchmark(c: &mut Criterion<WallTimeQps>) {
             BatchSize::PerIteration,
         );
     });
+    // Each query inserts 10000 objects, but it still one query
+    group.throughput(Throughput::Elements(1));
     group.bench_function("batch", |b| {
         b.iter_batched_ref(
             || init_db(),
@@ -64,7 +65,8 @@ fn criterion_benchmark(c: &mut Criterion<WallTimeQps>) {
     group.finish();
 
     let mut group = c.benchmark_group("insert_unique");
-    group.throughput(Throughput::Elements(1));
+    // Makes 10000 unique queries
+    group.throughput(Throughput::Elements(10000));
     group.bench_function("single", |b| {
         b.iter_batched_ref(
             || init_db_unique(),
@@ -72,6 +74,8 @@ fn criterion_benchmark(c: &mut Criterion<WallTimeQps>) {
             BatchSize::PerIteration,
         );
     });
+    // Each query inserts 10000 objects, but it still one query
+    group.throughput(Throughput::Elements(1));
     group.bench_function("batch", |b| {
         b.iter_batched_ref(
             || init_db_unique(),
