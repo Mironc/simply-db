@@ -128,6 +128,9 @@ pub enum ParseErrorDTO {
     UnsupportedCharacter {
         character: char,
     },
+    UnexpectedValue {
+        expected: String,
+    },
 }
 #[cfg(feature = "server")]
 impl axum::response::IntoResponse for ParseErrorDTO {
@@ -166,6 +169,9 @@ impl From<ParseError<'_>> for ParseErrorDTO {
             ParseError::UnsupportedCharacter { character } => {
                 ParseErrorDTO::UnsupportedCharacter { character }
             }
+            ParseError::UnexpectedValue { expected } => ParseErrorDTO::UnexpectedValue {
+                expected: expected.to_string(),
+            },
         }
     }
 }

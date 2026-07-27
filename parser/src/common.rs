@@ -27,6 +27,9 @@ pub enum ParseError<'a> {
         expected: &'a str,
         given: &'a str,
     },
+    UnexpectedValue {
+        expected: &'a str,
+    },
     /// Unexpected end of file
     UnexpectedEof,
     /// Unexpected start of file

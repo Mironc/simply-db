@@ -109,6 +109,7 @@ pub(super) fn parse_select_query<'a>(mut walker: TokenWalker<'a, '_>) -> ParseRe
                 }
                 open -= 1
             }
+            // Counting brackets to differentiate commas inside expressions and outside
             if token.to_string() == "," && open == 0 {
                 expressions.push(parse_expr(&mut walker_new, walker.position())?);
                 walker_new = walker.clone_simple();
@@ -131,16 +132,74 @@ pub(super) fn parse_select_query<'a>(mut walker: TokenWalker<'a, '_>) -> ParseRe
         && *k == Keyword::Where
     {
         walker.skip(1);
-        let end = walker.tokens().len();
-        Some(parse_expr(&mut walker, end)?)
+        let start = walker.position();
+        let mut take = 1;
+        while let Some(token) = walker.peek_n(take) {
+            if matches!(
+                token,
+                TokenValue::Keyword(Keyword::Take)
+                    | TokenValue::Keyword(Keyword::Skip)
+                    | TokenValue::Keyword(Keyword::Order)
+            ) {
+                take += 1;
+                break;
+            }
+            take += 1;
+        }
+        Some(parse_expr(&mut walker, start + take)?)
     } else {
         None
     };
+    let mut skip = None;
+    let mut take = None;
+    while let Some(TokenValue::Keyword(keyword)) = walker.next() {
+        match keyword {
+            Keyword::Take => {
+                take = Some(parse_parameter_number_argument(&mut walker)?);
+            }
+            Keyword::Skip => {
+                skip = Some(parse_parameter_number_argument(&mut walker)?);
+            }
+            Keyword::Order => {}
+            _ => (),
+        }
+    }
     Ok(Query::Select(SelectQuery::new(
         table_name,
         projection,
         filter_expr,
+        skip,
+        take,
     )))
+}
+fn parse_parameter_number_argument<'a>(walker: &mut TokenWalker<'a, '_>) -> ParseResult<'a, usize> {
+    let token = walker.next().ok_or(ParseError::UnexpectedEof)?;
+    if let TokenValue::Sign(Sign::Minus) = token {
+        return Err(ParseError::Other {
+            message: "Expected non-negative argument",
+        });
+    }
+    let result = if let TokenValue::Ident(word) = token {
+        match str::parse::<usize>(word) {
+            Ok(n) => n,
+            Err(_) => {
+                return Err(ParseError::Other {
+                    message: "Expected number literal",
+                });
+            }
+        }
+    } else {
+        return Err(ParseError::UnexpectedValue {
+            expected: "Expected numeric argument",
+        });
+    };
+    if let Some(TokenValue::Delimiter(Delimiter::Dot)) = walker.peek_next() {
+        return Err(ParseError::UnexpectedValue {
+            expected: "Expected integer argument",
+        });
+    }
+
+    Ok(result)
 }
 /// Parses CREATE TABLE query
 pub(super) fn parse_create_query<'a>(mut walker: TokenWalker<'a, '_>) -> ParseResult<'a, Query> {

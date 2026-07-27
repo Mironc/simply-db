@@ -3,7 +3,7 @@ mod setup;
 use criterion::{BatchSize, Criterion, Throughput, criterion_group, criterion_main};
 use query::{
     expr::{ComparisonOp, Expr, LiteralValue},
-    queries::select::{Projection, SelectError, SelectQuery},
+    queries::select::{Projection, SelectError, SelectQueryBuilder},
 };
 use storage::{common_types::DataValue, db::Database};
 
@@ -13,37 +13,36 @@ use crate::{
 };
 
 fn select_rows(db: &mut Database) -> Result<Vec<Vec<DataValue>>, SelectError> {
-    let query = SelectQuery::new("users".to_owned(), Projection::Row, None);
+    let query = SelectQueryBuilder::new("users".to_owned(), Projection::Row).build();
     query.execute(db)
 }
 fn select_projection(db: &mut Database) -> Result<Vec<Vec<DataValue>>, SelectError> {
-    let query = SelectQuery::new(
+    let query = SelectQueryBuilder::new(
         "users".to_owned(),
         Projection::Expr(vec![Expr::Field("id".to_owned())]),
-        None,
-    );
+    )
+    .build();
     query.execute(db)
 }
 fn select_where(db: &mut Database) -> Result<Vec<Vec<DataValue>>, SelectError> {
-    let query = SelectQuery::new(
-        "users".to_owned(),
-        Projection::Row,
-        Some(Expr::Comparison(Box::new(ComparisonOp::Eq(
+    let query = SelectQueryBuilder::new("users".to_owned(), Projection::Row)
+        .filter_expr(Expr::Comparison(Box::new(ComparisonOp::Eq(
             Expr::Field("email".to_owned()),
             Expr::Literal(LiteralValue::Text("fconsidinerr@uiuc.edu".to_owned())),
-        )))),
-    );
+        ))))
+        .build();
     query.execute(db)
 }
 fn select_where_projection(db: &mut Database) -> Result<Vec<Vec<DataValue>>, SelectError> {
-    let query = SelectQuery::new(
+    let query = SelectQueryBuilder::new(
         "users".to_owned(),
         Projection::Expr(vec![Expr::Field("id".to_owned())]),
-        Some(Expr::Comparison(Box::new(ComparisonOp::Eq(
-            Expr::Field("email".to_owned()),
-            Expr::Literal(LiteralValue::Text("fconsidinerr@uiuc.edu".to_owned())),
-        )))),
-    );
+    )
+    .filter_expr(Expr::Comparison(Box::new(ComparisonOp::Eq(
+        Expr::Field("email".to_owned()),
+        Expr::Literal(LiteralValue::Text("fconsidinerr@uiuc.edu".to_owned())),
+    ))))
+    .build();
     query.execute(db)
 }
 fn criterion_benchmark(c: &mut Criterion<WallTimeQps>) {

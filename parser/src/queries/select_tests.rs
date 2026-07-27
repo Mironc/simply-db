@@ -1,4 +1,8 @@
-use query::{Query, queries::select::Projection};
+use query::{
+    Query,
+    expr::{ComparisonOp, Expr, LiteralValue},
+    queries::select::Projection,
+};
 
 use crate::{
     common::{ParseError, TokenWalker},
@@ -7,7 +11,7 @@ use crate::{
 };
 
 #[test]
-fn select_asterisk() {
+fn select_rows() {
     let tokens = tokenize("SELECT * FROM users").unwrap();
     let walker = TokenWalker::new(&tokens);
 
@@ -23,33 +27,71 @@ fn select_asterisk() {
 }
 
 #[test]
-fn select_with_where() {
-    let tokens = tokenize("SELECT * FROM products WHERE price").unwrap();
+fn select_with_filter_and_projection_expr() {
+    let tokens = tokenize("SELECT age FROM users WHERE age > 18").unwrap();
+    let walker = TokenWalker::new(&tokens);
+
+    let res = parse_select_query(walker);
+
+    if let Ok(Query::Select(query)) = res {
+        assert_eq!(query.table_name(), "users");
+        assert_eq!(
+            query.projection(),
+            &Projection::Expr(vec![Expr::Field("age".to_owned())])
+        );
+
+        assert_eq!(
+            query.filter_expr(),
+            Some(&Expr::Comparison(Box::new(ComparisonOp::Greater(
+                Expr::Field("age".to_owned()),
+                Expr::Literal(LiteralValue::Int(18))
+            ))))
+        );
+    } else {
+        println!("{:?}", res);
+        panic!("expected select query");
+    }
+}
+
+#[test]
+fn select_skip_take() {
+    let tokens = tokenize("SELECT * FROM users TAKE 15 SKIP 30").unwrap();
     let walker = TokenWalker::new(&tokens);
 
     let res = parse_select_query(walker);
 
     if let Query::Select(query) = res.unwrap() {
-        assert_eq!(query.table_name(), "products");
-        assert!(
-            query.filter_expr().is_some(),
-            "WHERE expr should be created"
-        );
+        assert_eq!(query.take(), Some(15));
+        assert_eq!(query.skip(), Some(30));
     } else {
         panic!("Expected select query")
     }
 }
-
 #[test]
-fn missing_select_keyword() {
-    let tokens = tokenize("NOT_SELECT *").unwrap();
-    let walker = TokenWalker::new(&tokens);
+fn missing_keywords() {
+    let test_cases = [("* FROM users"), ("SELECT * users")];
+    for test in test_cases {
+        let tokens = tokenize(test).unwrap();
+        let walker = TokenWalker::new(&tokens);
 
-    let res = parse_select_query(walker);
-    assert!(
-        matches!(res, Err(ParseError::UnexpectedSymbol { .. })),
-        "Expected error"
-    );
+        let res = parse_select_query(walker);
+        assert!(
+            matches!(res, Err(ParseError::UnexpectedSymbol { .. })),
+            "{:?}",
+            res
+        );
+    }
+}
+#[test]
+fn missing_arguments() {
+    let test_cases = [("SELECT * FROM users SKIP"), ("SELECT * FROM users TAKE")];
+    for test in test_cases {
+        let tokens = tokenize(test).unwrap();
+        let walker = TokenWalker::new(&tokens);
+
+        let res = parse_select_query(walker);
+        assert!(matches!(res, Err(ParseError::UnexpectedEof)), "{:?}", res);
+    }
 }
 
 #[test]
@@ -85,33 +127,17 @@ fn multiple_expressions_projection() {
     if let Query::Select(query) = res.unwrap() {
         if let Projection::Expr(exprs) = query.projection() {
             assert_eq!(
-                exprs.len(),
-                3,
-                "expected 3 expressions in projections (id, age and is_active)"
+                exprs,
+                &vec![
+                    Expr::Field("id".to_owned()),
+                    Expr::Field("age".to_owned()),
+                    Expr::Field("is_active".to_owned())
+                ],
             );
         } else {
             panic!("Expected projection variant Projection::Expr");
         }
     } else {
         panic!("Expected select query")
-    }
-}
-#[test]
-fn select_with_complex_where() {
-    let tokens = tokenize("SELECT age FROM users WHERE age > 18").unwrap();
-    let walker = TokenWalker::new(&tokens);
-
-    let res = parse_select_query(walker);
-
-    if let Ok(Query::Select(query)) = res {
-        assert_eq!(query.table_name(), "users");
-        assert!(matches!(query.projection(), Projection::Expr(_)));
-
-        assert!(
-            query.filter_expr().is_some(),
-            "filter expr shouldn't be empty"
-        );
-    } else {
-        panic!("expected select query");
     }
 }

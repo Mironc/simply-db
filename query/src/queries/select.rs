@@ -60,14 +60,24 @@ pub struct SelectQuery {
     table: String,
     projection: Projection,
     filter_expr: Option<Expr>,
+    skip: Option<usize>,
+    take: Option<usize>,
 }
 
 impl SelectQuery {
-    pub fn new(table: String, projection: Projection, filter_expr: Option<Expr>) -> Self {
+    pub fn new(
+        table: String,
+        projection: Projection,
+        filter_expr: Option<Expr>,
+        skip: Option<usize>,
+        take: Option<usize>,
+    ) -> Self {
         Self {
             table,
             projection,
             filter_expr,
+            skip,
+            take,
         }
     }
 
@@ -75,20 +85,32 @@ impl SelectQuery {
         let table = db.get_table(&self.table).ok_or(SelectError::NoTable {
             table: self.table.to_owned(),
         })?;
+        let mut skip = self.skip.unwrap_or(0);
+        let take = self.take.unwrap_or(usize::MAX);
         let mut projected = Vec::new();
         for row in table.rows().iter() {
+            // Break if enough rows were projected
+            if projected.len() == take {
+                break;
+            }
+
             let context = Context::new(row.data(), table.schema());
-            if let Some(filter) = &self.filter_expr {
+
+            let matched = if let Some(filter) = &self.filter_expr {
                 match *filter.execute(&context)? {
-                    DataValue::Scalar(ScalarValue::Bool(val)) => {
-                        if val {
-                            projected.push(self.projection.execute(&context)?);
-                        }
-                    }
+                    DataValue::Scalar(ScalarValue::Bool(val)) => val,
                     DataValue::Null => continue,
                     _ => return Err(SelectError::BadExpr),
                 }
             } else {
+                true
+            };
+
+            if matched {
+                if skip != 0 {
+                    skip -= 1;
+                    continue;
+                }
                 projected.push(self.projection.execute(&context)?);
             }
         }
@@ -105,5 +127,40 @@ impl SelectQuery {
 
     pub fn filter_expr(&self) -> Option<&Expr> {
         self.filter_expr.as_ref()
+    }
+
+    pub fn skip(&self) -> Option<usize> {
+        self.skip
+    }
+
+    pub fn take(&self) -> Option<usize> {
+        self.take
+    }
+}
+
+pub struct SelectQueryBuilder {
+    query: SelectQuery,
+}
+
+impl SelectQueryBuilder {
+    pub fn new(table: String, projection: Projection) -> Self {
+        Self {
+            query: SelectQuery::new(table, projection, None, None, None),
+        }
+    }
+    pub fn take(mut self, take: usize) -> Self {
+        self.query.take = Some(take);
+        self
+    }
+    pub fn skip(mut self, skip: usize) -> Self {
+        self.query.skip = Some(skip);
+        self
+    }
+    pub fn filter_expr(mut self, expr: Expr) -> Self {
+        self.query.filter_expr = Some(expr);
+        self
+    }
+    pub fn build(self) -> SelectQuery {
+        self.query
     }
 }
