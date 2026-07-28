@@ -26,10 +26,20 @@ impl Record {
         vec!["id".to_owned(), "name".to_owned(), "email".to_owned()]
     }
 }
-pub fn load_records() -> Vec<Record> {
+pub fn load_records_1k() -> Vec<Record> {
     let data = include_str!(concat!(
         env!("CARGO_MANIFEST_DIR"),
         "/mock_data/USER_1K.csv"
+    ));
+    csv::Reader::from_reader(data.as_bytes())
+        .into_deserialize::<Record>()
+        .filter_map(|x| if let Ok(x) = x { Some(x) } else { None })
+        .collect::<Vec<Record>>()
+}
+pub fn load_records_12_5k() -> Vec<Record> {
+    let data = include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/mock_data/USER_12.5K.csv"
     ));
     csv::Reader::from_reader(data.as_bytes())
         .into_deserialize::<Record>()

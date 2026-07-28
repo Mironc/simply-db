@@ -42,49 +42,52 @@ fn insert_batch(db: &Database, records: &[Record]) {
     });
 }
 fn criterion_benchmark(c: &mut Criterion<WallTimeQps>) {
-    let records = setup::load_records();
-    let batch_size = records.len() as u64;
-    let mut group = c.benchmark_group("insert");
-    // Makes 10000 unique queries
-    group.throughput(Throughput::Elements(batch_size));
-    group.bench_function("single", |b| {
-        b.iter_batched_ref(
-            || init_db(),
-            |db| insert_single(db, &records),
-            BatchSize::PerIteration,
-        );
-    });
-    // Each query inserts 1000 objects, but it still one query
-    group.throughput(Throughput::Elements(1));
-    group.bench_function("batch", |b| {
-        b.iter_batched_ref(
-            || init_db(),
-            |db| insert_batch(db, &records),
-            BatchSize::PerIteration,
-        );
-    });
-    group.finish();
+    for record_spawn in [|| setup::load_records_1k(), || setup::load_records_12_5k()] {
+        let records = record_spawn();
 
-    let mut group = c.benchmark_group("insert_unique");
-    // Makes 10000 unique queries
-    group.throughput(Throughput::Elements(batch_size));
-    group.bench_function("single", |b| {
-        b.iter_batched_ref(
-            || init_db_unique(),
-            |db| insert_single(db, &records),
-            BatchSize::PerIteration,
-        );
-    });
-    // Each query inserts 1000 objects, but it still one query
-    group.throughput(Throughput::Elements(1));
-    group.bench_function("batch", |b| {
-        b.iter_batched_ref(
-            || init_db_unique(),
-            |db| insert_batch(db, &records),
-            BatchSize::PerIteration,
-        );
-    });
-    group.finish();
+        let batch_size = records.len() as u64;
+        let mut group = c.benchmark_group(format!("insert_{}", batch_size));
+        // Makes a lot of unique queries
+        group.throughput(Throughput::Elements(batch_size));
+        group.bench_function("single", |b| {
+            b.iter_batched_ref(
+                || init_db(),
+                |db| insert_single(db, &records),
+                BatchSize::PerIteration,
+            );
+        });
+        // Each query inserts many objects, but it still one query
+        group.throughput(Throughput::Elements(1));
+        group.bench_function("batch", |b| {
+            b.iter_batched_ref(
+                || init_db(),
+                |db| insert_batch(db, &records),
+                BatchSize::PerIteration,
+            );
+        });
+        group.finish();
+
+        let mut group = c.benchmark_group(format!("insert_unique_{}", records.len()));
+        // Makes a lot of unique queries
+        group.throughput(Throughput::Elements(batch_size));
+        group.bench_function("single", |b| {
+            b.iter_batched_ref(
+                || init_db_unique(),
+                |db| insert_single(db, &records),
+                BatchSize::PerIteration,
+            );
+        });
+        // Each query inserts many objects, but it still one query
+        group.throughput(Throughput::Elements(1));
+        group.bench_function("batch", |b| {
+            b.iter_batched_ref(
+                || init_db_unique(),
+                |db| insert_batch(db, &records),
+                BatchSize::PerIteration,
+            );
+        });
+        group.finish();
+    }
 }
 
 criterion_group!(

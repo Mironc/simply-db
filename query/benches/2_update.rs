@@ -1,7 +1,7 @@
 mod formatter;
 use crate::{
     formatter::WallTimeQps,
-    setup::{init_db, insert_records, load_records},
+    setup::{init_db, insert_records},
 };
 mod setup;
 use criterion::{BatchSize, Criterion, Throughput, criterion_group, criterion_main};
@@ -23,15 +23,18 @@ fn update_rows(db: &mut Database) -> Result<(), UpdateError> {
     query.execute(db)
 }
 fn criterion_benchmark(c: &mut Criterion<WallTimeQps>) {
-    let records = load_records();
-    let db = init_db();
-    insert_records(&db, &records);
-    let mut group = c.benchmark_group("update");
-    group.throughput(Throughput::Elements(1));
-    group.bench_function("update", |b| {
-        b.iter_batched_ref(|| db.clone(), |db| update_rows(db), BatchSize::LargeInput);
-    });
-    group.finish();
+    for record_spawn in [|| setup::load_records_1k(), || setup::load_records_12_5k()] {
+        let records = record_spawn();
+        let batch_size = records.len();
+        let db = init_db();
+        insert_records(&db, &records);
+        let mut group = c.benchmark_group(format!("update_{}", batch_size));
+        group.throughput(Throughput::Elements(1));
+        group.bench_function("update", |b| {
+            b.iter_batched_ref(|| db.clone(), |db| update_rows(db), BatchSize::LargeInput);
+        });
+        group.finish();
+    }
 }
 
 criterion_group! {

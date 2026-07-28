@@ -9,7 +9,7 @@ use storage::{common_types::DataValue, db::Database};
 
 use crate::{
     formatter::WallTimeQps,
-    setup::{init_db, insert_records, load_records},
+    setup::{init_db, insert_records},
 };
 
 fn select_rows(db: &mut Database) -> Result<Vec<Vec<DataValue>>, SelectError> {
@@ -46,37 +46,40 @@ fn select_where_projection(db: &mut Database) -> Result<Vec<Vec<DataValue>>, Sel
     query.execute(db)
 }
 fn criterion_benchmark(c: &mut Criterion<WallTimeQps>) {
-    let records = load_records();
-    let db = init_db();
-    insert_records(&db, &records);
-    let mut group = c.benchmark_group("select");
-    group.throughput(Throughput::Elements(1));
-    group.bench_function("row", |b| {
-        b.iter_batched_ref(|| db.clone(), |db| select_rows(db), BatchSize::PerIteration);
-    });
+    for record_spawn in [|| setup::load_records_1k(), || setup::load_records_12_5k()] {
+        let records = record_spawn();
+        let db = init_db();
+        let batch_size = records.len() as u64;
+        insert_records(&db, &records);
+        let mut group = c.benchmark_group(format!("select_{}", batch_size));
+        group.throughput(Throughput::Elements(1));
+        group.bench_function("row", |b| {
+            b.iter_batched_ref(|| db.clone(), |db| select_rows(db), BatchSize::PerIteration);
+        });
 
-    group.bench_function("projection", |b| {
-        b.iter_batched_ref(
-            || db.clone(),
-            |db| select_projection(db),
-            BatchSize::PerIteration,
-        );
-    });
+        group.bench_function("projection", |b| {
+            b.iter_batched_ref(
+                || db.clone(),
+                |db| select_projection(db),
+                BatchSize::PerIteration,
+            );
+        });
 
-    group.bench_function("row_where", |b| {
-        b.iter_batched_ref(
-            || db.clone(),
-            |db| select_where(db),
-            BatchSize::PerIteration,
-        );
-    });
-    group.bench_function("projection_where", |b| {
-        b.iter_batched_ref(
-            || db.clone(),
-            |db| select_where_projection(db),
-            BatchSize::PerIteration,
-        );
-    });
+        group.bench_function("row_where", |b| {
+            b.iter_batched_ref(
+                || db.clone(),
+                |db| select_where(db),
+                BatchSize::PerIteration,
+            );
+        });
+        group.bench_function("projection_where", |b| {
+            b.iter_batched_ref(
+                || db.clone(),
+                |db| select_where_projection(db),
+                BatchSize::PerIteration,
+            );
+        });
+    }
 }
 
 criterion_group! {

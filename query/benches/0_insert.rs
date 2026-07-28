@@ -5,7 +5,7 @@ use criterion::{BatchSize, Criterion, Throughput, criterion_group, criterion_mai
 use query::queries::insert::InsertQuery;
 use storage::db::Database;
 
-use crate::setup::{Record, init_db, init_db_unique, load_records};
+use crate::setup::{Record, init_db, init_db_unique};
 
 fn insert_by_one(db: &mut Database, records: &[Record]) {
     for record in records {
@@ -26,49 +26,52 @@ fn insert_batch(db: &mut Database, records: &[Record]) {
     insert_query.execute(db).unwrap();
 }
 fn criterion_benchmark(c: &mut Criterion) {
-    let records = load_records();
-    let batch_size = records.len() as u64;
-    if batch_size == 0 {
-        panic!("Expected dataset with more than 0 elements or file was corrupted");
+    for record_spawn in [|| setup::load_records_1k(), || setup::load_records_12_5k()] {
+        let records = record_spawn();
+
+        let batch_size = records.len() as u64;
+        let mut group = c.benchmark_group(format!("insert_{}", batch_size));
+        group.throughput(Throughput::Elements(batch_size));
+
+        group.bench_function("single", |b| {
+            b.iter_batched_ref(
+                || init_db(),
+                |db| insert_by_one(db, &records),
+                BatchSize::PerIteration,
+            );
+        });
+
+        group.bench_function("batch", |b| {
+            b.iter_batched_ref(
+                || init_db(),
+                |db| insert_batch(db, &records),
+                BatchSize::PerIteration,
+            );
+        });
+
+        group.finish();
+
+        let mut group = c.benchmark_group(format!("insert_unique_{}", records.len()));
+        group.throughput(Throughput::Elements(batch_size));
+
+        group.bench_function("single", |b| {
+            b.iter_batched_ref(
+                || init_db_unique(),
+                |db| insert_by_one(db, &records),
+                BatchSize::PerIteration,
+            );
+        });
+
+        group.bench_function("batch", |b| {
+            b.iter_batched_ref(
+                || init_db_unique(),
+                |db| insert_batch(db, &records),
+                BatchSize::PerIteration,
+            );
+        });
+
+        group.finish();
     }
-
-    let mut group = c.benchmark_group("insert");
-    group.throughput(Throughput::Elements(batch_size));
-    group.bench_function("single", |b| {
-        b.iter_batched_ref(
-            || init_db(),
-            |db| insert_by_one(db, &records),
-            BatchSize::PerIteration,
-        );
-    });
-
-    group.bench_function("batch", |b| {
-        b.iter_batched_ref(
-            || init_db(),
-            |db| insert_batch(db, &records),
-            BatchSize::PerIteration,
-        );
-    });
-    group.finish();
-
-    let mut group = c.benchmark_group("insert_unique");
-    group.throughput(Throughput::Elements(batch_size));
-    group.bench_function("single", |b| {
-        b.iter_batched_ref(
-            || init_db_unique(),
-            |db| insert_by_one(db, &records),
-            BatchSize::PerIteration,
-        );
-    });
-
-    group.bench_function("batch", |b| {
-        b.iter_batched_ref(
-            || init_db_unique(),
-            |db| insert_batch(db, &records),
-            BatchSize::PerIteration,
-        );
-    });
-    group.finish();
 }
 
 criterion_group!(benches, criterion_benchmark);

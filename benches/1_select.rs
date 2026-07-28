@@ -16,14 +16,17 @@ fn select(db: &Database) {
 }
 fn criterion_benchmark(c: &mut Criterion<WallTimeQps>) {
     let db = init_db();
-    let records = setup::load_records();
-    setup::insert_records(&db, &records);
-    let mut group = c.benchmark_group("select");
-    group.throughput(Throughput::Elements(1));
-    group.bench_function("projection_where", |b| {
-        b.iter(|| select(&db));
-    });
-    group.finish();
+
+    for spawn_records in [|| setup::load_records_1k(), || setup::load_records_12_5k()] {
+        let records = spawn_records();
+        setup::insert_records(&db, &records);
+        let mut group = c.benchmark_group(format!("select_{}", records.len()));
+        group.throughput(Throughput::Elements(1));
+        group.bench_function("projection_where", |b| {
+            b.iter(|| select(&db));
+        });
+        group.finish();
+    }
 }
 
 criterion_group!(
