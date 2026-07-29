@@ -2,7 +2,7 @@ use std::fmt::Display;
 
 use crate::common::ParseError;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TokenValue<'a> {
     Ident(&'a str),
     Sign(Sign),
@@ -11,6 +11,8 @@ pub enum TokenValue<'a> {
     TextLiteral(&'a str),
     /// Start of the file
     SOF,
+    /// End of the file
+    EOF,
 }
 impl<'a> Display for TokenValue<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -36,6 +38,7 @@ impl<'a> TokenValue<'a> {
             TokenValue::Keyword(k) => k.as_str(),
             TokenValue::SOF => "Sof",
             TokenValue::TextLiteral(l) => l,
+            TokenValue::EOF => "Eof",
         }
     }
     pub fn is_ident(&self) -> bool {
@@ -259,34 +262,60 @@ fn is_valid_identifier_char(c: char) -> bool {
         _ => true,
     }
 }
-/// Turns string into vector of tokens
-pub fn tokenize<'a>(source: &'a str) -> Result<Vec<TokenValue<'a>>, ParseError<'a>> {
-    let source = source.trim();
-    let bytes = source.as_bytes();
-    let mut tokens = Vec::with_capacity(50);
-    tokens.push(TokenValue::SOF);
-    let mut i = 0;
-    while i < bytes.len() {
-        let b = *unsafe { bytes.get_unchecked(i) };
-        // Skip whitespaces
-        if b.is_ascii_whitespace() {
-            i += 1;
-            continue;
+#[derive(Debug, Clone, Copy)]
+pub struct Lexer<'a> {
+    source: &'a [u8],
+    position: usize,
+}
+impl<'a> Lexer<'a> {
+    pub fn new(source: &'a str) -> Self {
+        Self {
+            source: source.as_bytes(),
+            position: 0,
         }
+    }
+
+    pub fn position(&self) -> usize {
+        self.position
+    }
+
+    pub fn set_position(&mut self, position: usize) {
+        self.position = position
+    }
+
+    #[inline(always)]
+    pub fn next_token(&mut self) -> Result<TokenValue<'a>, ParseError<'a>> {
+        while self.position < self.source.len() {
+            let b = unsafe { *self.source.get_unchecked(self.position) };
+            if b.is_ascii_whitespace() {
+                self.position += 1;
+            } else {
+                break;
+            }
+        }
+        if self.position >= self.source.len() {
+            return Ok(TokenValue::EOF);
+        }
+
+        let b = unsafe { *self.source.get_unchecked(self.position) };
         // Text literal, includes any utf-8 characters
         if b == b'\'' {
-            i += 1;
-            let start = i;
+            self.position += 1;
+            let start = self.position;
             // Skip until end or another apostrophe
-            while i < bytes.len() && *unsafe { bytes.get_unchecked(i) } != b'\'' {
-                i += 1;
+            while self.position < self.source.len()
+                && *unsafe { self.source.get_unchecked(self.position) } != b'\''
+            {
+                self.position += 1;
             }
             // Check if literal ends with apostrophe
-            if i < bytes.len() && *unsafe { bytes.get_unchecked(i) } == b'\'' {
-                let literal = unsafe { str::from_utf8_unchecked(&bytes[start..i]) };
-                tokens.push(TokenValue::TextLiteral(literal));
-                i += 1;
-                continue;
+            if self.position < self.source.len()
+                && *unsafe { self.source.get_unchecked(self.position) } == b'\''
+            {
+                let literal =
+                    unsafe { str::from_utf8_unchecked(&self.source[start..self.position]) };
+                self.position += 1;
+                return Ok(TokenValue::TextLiteral(literal));
             } else {
                 return Err(ParseError::UnclosedBracket('\''));
             }
@@ -295,8 +324,8 @@ pub fn tokenize<'a>(source: &'a str) -> Result<Vec<TokenValue<'a>>, ParseError<'
         // Handle special characters (non-alphanumeric, excluding underscores).
         // We only check ASCII since all valid delimiters and signs are ASCII.
         if !b.is_ascii_alphanumeric() && b != b'_' {
-            let word = if i + 1 < bytes.len() {
-                [b, *unsafe { bytes.get_unchecked(i + 1) }]
+            let word = if self.position + 1 < self.source.len() {
+                [b, *unsafe { self.source.get_unchecked(self.position + 1) }]
             } else {
                 [b, 0]
             };
@@ -326,73 +355,93 @@ pub fn tokenize<'a>(source: &'a str) -> Result<Vec<TokenValue<'a>>, ParseError<'
                 },
             };
             if let Some((token, size)) = token_match {
-                tokens.push(token);
-                i += size;
-                continue;
+                self.position += size;
+                return Ok(token);
             }
         }
         // Identifiers
-        let start = i;
-        while i < source.len() {
-            let (codepoint, size) = next_utf8_code_point(bytes, i);
-            let char = unsafe { char::from_u32_unchecked(codepoint) };
-            if is_valid_identifier_char(char) {
-                i += size;
-            } else if char.is_ascii() {
-                break;
+        let start = self.position;
+        while self.position < self.source.len() {
+            let byte = *unsafe { self.source.get_unchecked(self.position) };
+            if byte.is_ascii() {
+                if byte.is_ascii_alphanumeric() || byte == b'_' {
+                    self.position += 1;
+                } else {
+                    break;
+                }
             } else {
-                return Err(ParseError::UnsupportedCharacter { character: char });
+                let (codepoint, size) = next_utf8_code_point(self.source, self.position);
+                let char = unsafe { char::from_u32_unchecked(codepoint) };
+                if is_valid_identifier_char(char) {
+                    self.position += size;
+                } else {
+                    return Err(ParseError::UnsupportedCharacter { character: char });
+                }
             }
         }
-        if start == i {
-            let (codepoint, _) = next_utf8_code_point(bytes, i);
+        if start == self.position {
+            let (codepoint, _) = next_utf8_code_point(self.source, self.position);
             let unknown_char = unsafe { char::from_u32_unchecked(codepoint) };
 
             return Err(ParseError::UnsupportedCharacter {
                 character: unknown_char,
             });
         }
-        if let Some(keyword) = Keyword::from_str(&source[start..i]) {
-            tokens.push(TokenValue::Keyword(keyword));
+        let ident = unsafe { str::from_utf8_unchecked(&self.source[start..self.position]) };
+        if let Some(keyword) = Keyword::from_str(ident) {
+            return Ok(TokenValue::Keyword(keyword));
         } else {
-            tokens.push(TokenValue::Ident(&source[start..i]));
+            return Ok(TokenValue::Ident(ident));
         }
     }
-    Ok(tokens)
+
+    pub fn source(&self) -> &'a [u8] {
+        self.source
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::{self as parser, common::ParseError};
-    use parser::tokenizer::{TokenValue, tokenize};
+    use crate::{self as parser, common::ParseError, lexer::Lexer};
+    use parser::lexer::TokenValue;
 
     /// Easier TokenValue creation
     macro_rules! token {
         (Ident($value:expr)) => {
-            parser::tokenizer::TokenValue::Ident($value.into())
+            parser::lexer::TokenValue::Ident($value.into())
         };
         (Keyword($value:ident)) => {
-            parser::tokenizer::TokenValue::Keyword(parser::tokenizer::Keyword::$value)
+            parser::lexer::TokenValue::Keyword(parser::lexer::Keyword::$value)
         };
         (Delimiter($value:ident)) => {
-            parser::tokenizer::TokenValue::Delimiter(parser::tokenizer::Delimiter::$value)
+            parser::lexer::TokenValue::Delimiter(parser::lexer::Delimiter::$value)
         };
         (Sign($value:ident)) => {
-            parser::tokenizer::TokenValue::Sign(parser::tokenizer::Sign::$value)
+            parser::lexer::TokenValue::Sign(parser::lexer::Sign::$value)
         };
         (TextLiteral($value:literal)) => {
-            parser::tokenizer::TokenValue::TextLiteral($value)
+            parser::lexer::TokenValue::TextLiteral($value)
         };
     }
-
+    fn collect_tokens_until_eof<'a>(
+        mut lexer: Lexer<'a>,
+    ) -> Result<Vec<TokenValue<'a>>, ParseError<'a>> {
+        let mut tokens = Vec::new();
+        while let token = lexer.next_token()?
+            && token != TokenValue::EOF
+        {
+            tokens.push(token);
+        }
+        Ok(tokens)
+    }
     #[test]
     fn success() {
         let string = "SELECT price FROM Prices WHERE price < 100";
-        let tokenized = tokenize(string);
+        let lexer = Lexer::new(string);
+        let tokens = collect_tokens_until_eof(lexer).unwrap();
         assert_eq!(
-            tokenized.unwrap(),
+            tokens,
             vec![
-                TokenValue::SOF,
                 token!(Keyword(Select)),
                 token!(Ident("price")),
                 token!(Keyword(From)),
@@ -405,11 +454,11 @@ mod tests {
         );
 
         let string = "SELECT price FROM Prices WHERE price <= 100";
-        let tokenized = tokenize(string);
+        let lexer = Lexer::new(string);
+        let tokens = collect_tokens_until_eof(lexer).unwrap();
         assert_eq!(
-            tokenized.unwrap(),
+            tokens,
             vec![
-                TokenValue::SOF,
                 token!(Keyword(Select)),
                 token!(Ident("price")),
                 token!(Keyword(From)),
@@ -422,11 +471,11 @@ mod tests {
         );
 
         let string = "SELECT price FROM Prices WHERE (price >= 100)";
-        let tokenized = tokenize(string);
+        let lexer = Lexer::new(string);
+        let tokens = collect_tokens_until_eof(lexer).unwrap();
         assert_eq!(
-            tokenized.unwrap(),
+            tokens,
             vec![
-                TokenValue::SOF,
                 token!(Keyword(Select)),
                 token!(Ident("price")),
                 token!(Keyword(From)),
@@ -441,11 +490,11 @@ mod tests {
         );
 
         let string = "INSERT INTO Items (price,name) VALUES (50,'Egg')";
-        let tokenized = tokenize(string);
+        let lexer = Lexer::new(string);
+        let tokens = collect_tokens_until_eof(lexer).unwrap();
         assert_eq!(
-            tokenized.unwrap(),
+            tokens,
             vec![
-                TokenValue::SOF,
                 token!(Keyword(Insert)),
                 token!(Keyword(Into)),
                 token!(Ident("Items")),
@@ -466,42 +515,37 @@ mod tests {
     #[test]
     fn unclosed_text_literal() {
         let string = "' unclosed";
-        let tokenized = tokenize(string);
-        assert_eq!(tokenized, Err(ParseError::UnclosedBracket('\'')))
+        let lexer = Lexer::new(string);
+        let tokens = collect_tokens_until_eof(lexer);
+        assert_eq!(tokens, Err(ParseError::UnclosedBracket('\'')))
     }
     #[test]
     fn multiple_blanks() {
         let string = "'hello  '";
-        let tokenized = tokenize(string);
-        assert_eq!(
-            tokenized.unwrap(),
-            vec![TokenValue::SOF, token!(TextLiteral("hello  ")),]
-        );
+        let lexer = Lexer::new(string);
+        let tokens = collect_tokens_until_eof(lexer).unwrap();
+        assert_eq!(tokens, vec![token!(TextLiteral("hello  ")),]);
     }
 
     #[test]
     fn short_identifiers() {
         let string = "u s c";
-        let tokenized = tokenize(string);
+        let lexer = Lexer::new(string);
+        let tokens = collect_tokens_until_eof(lexer).unwrap();
         assert_eq!(
-            tokenized.unwrap(),
-            vec![
-                TokenValue::SOF,
-                token!(Ident("u")),
-                token!(Ident("s")),
-                token!(Ident("c"))
-            ]
+            tokens,
+            vec![token!(Ident("u")), token!(Ident("s")), token!(Ident("c"))]
         );
     }
 
     #[test]
     fn snake_case_ident() {
         let string = "is_active how_to_come_up_with_good_ident";
-        let tokenized = tokenize(string).unwrap();
+        let lexer = Lexer::new(string);
+        let tokens = collect_tokens_until_eof(lexer).unwrap();
         assert_eq!(
-            tokenized,
+            tokens,
             vec![
-                TokenValue::SOF,
                 token!(Ident("is_active")),
                 token!(Ident("how_to_come_up_with_good_ident")),
             ]
@@ -513,9 +557,10 @@ mod tests {
         let string = "~`@#^&{}|?\\¢£¤¥¦§¨©«¬®¯°±²³´¶·¸¹º»¼½¾¿×÷±∓√∛∜∝∞∟∠∡∢∣∤∥∦∧∨∩∪∴∵∶∷∸∹∺∻∼∽∾∿≀≁≂≃≄≅≆≇≈≉≊≋≌≍≎≏≐≑≒≓≔≕≖≗≘≙≚≛≜≝≞≟≠≡≢≣≤≥≦≧≨≩≪≫≬≭≮≯≰≱≲≳≴≵≶≷≸≹≺≻≼≽≾≿⊀⊁⊂⊃⊄⊅⊆⊇⊈⊉⊊⊋⊌⊍⊎⊏⊐⊑⊒⊓⊔⊕⊖⊗⊘⊙⊚⊛⊜⊝⊞⊟⊠⊡⊢⊣⊤⊥⊦⊧⊨⊩⊪⊫⊬⊭⊮⊯⊰⊱⊲⊳⊴⊵⊶⊷⊸⊹⊺⊻⊼⊽⊾⊿⋀⋁⋂⋃⋄⋅⋆⋇⋈⋉⋊⋋⋌⋍⋎⋏⋐⋑⋒⋓⋔⋕⋖⋗⋘⋙⋚⋛⋜⋝⋞⋟⋠⋡⋢⋣⋤⋥⋦⋧⋨⋩⋪⋫⋬⋭⋮⋯⋰⋱";
         for c in string.chars() {
             let as_str = format!("{}", c);
-            let tokenized = tokenize(&as_str);
+            let lexer = Lexer::new(&as_str);
+            let tokens = collect_tokens_until_eof(lexer);
             assert_eq!(
-                tokenized.unwrap_err(),
+                tokens.unwrap_err(),
                 ParseError::UnsupportedCharacter { character: c }
             )
         }

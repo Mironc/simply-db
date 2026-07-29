@@ -1,11 +1,12 @@
+use crate::lexer::Lexer;
 use std::fmt;
 use std::ops::Deref;
 // Helper macro to parse a string cleanly in tests
 macro_rules! parse {
     ($input:expr) => {{
-        let tokens = tokenize($input).unwrap();
-        let mut walker = TokenWalker::new(&tokens);
-        parse_expr(&mut walker, tokens.len())
+        let lexer = Lexer::new($input);
+        let mut walker = Parser::new(lexer).unwrap();
+        parse_expr(&mut walker, lexer.source().len())
     }};
 }
 fn null_context() -> Context<'static> {
@@ -13,10 +14,7 @@ fn null_context() -> Context<'static> {
 }
 #[test]
 fn arithmetic() {
-    let expr = {
-        let tokens = tokenize("5+3").unwrap();
-        parse_expr(&mut TokenWalker::new(&tokens), tokens.len())
-    };
+    let expr = parse!("5+3");
 
     let expected = scalar!(Int(8));
 
@@ -238,7 +236,7 @@ use storage::scalar;
 use storage::schema::{FieldType, Schema};
 
 use crate::{ExpectExprErr, ParseError};
-use crate::{common::TokenWalker, queries::expr::parse_expr, tokenizer::tokenize};
+use crate::{common::Parser, queries::expr::parse_expr};
 
 /// First one is literal, second one is how it named in test
 struct Op(&'static str, &'static str);

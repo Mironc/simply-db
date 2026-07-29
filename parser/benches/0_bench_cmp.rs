@@ -20,7 +20,7 @@
 //! * `to_string_cmp_*`  -> Slowest (nanoseconds)
 
 use criterion::{Criterion, criterion_group, criterion_main};
-use parser::tokenizer::{Sign, TokenValue};
+use parser::lexer::{Sign, TokenValue};
 use std::hint::black_box;
 
 fn criterion_benchmark(c: &mut Criterion) {

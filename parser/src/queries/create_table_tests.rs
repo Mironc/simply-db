@@ -6,18 +6,17 @@ use storage::{
 use structures::VecMap;
 
 use crate::{
-    common::{ParseError, TokenWalker},
+    common::{ParseError, Parser},
+    lexer::Lexer,
     queries::query::parse_create_query,
-    tokenizer::tokenize,
 };
 
 #[test]
 fn create_table_success() {
-    let tokens =
-        tokenize("CREATE TABLE IF NOT EXISTS users (id INT PRIMARY KEY, name TEXT NOT NULL)")
-            .unwrap();
+    let lexer =
+        Lexer::new("CREATE TABLE IF NOT EXISTS users (id INT PRIMARY KEY, name TEXT NOT NULL)");
 
-    let walker = TokenWalker::new(&tokens);
+    let walker = Parser::new(lexer).unwrap();
     let query = parse_create_query(walker);
 
     let mut row_type = VecMap::new();
@@ -35,9 +34,9 @@ fn create_table_success() {
 }
 #[test]
 fn create_table_no_modifiers() {
-    let tokens = tokenize("CREATE TABLE IF NOT EXISTS users (id INT, name TEXT)").unwrap();
+    let lexer = Lexer::new("CREATE TABLE IF NOT EXISTS users (id INT, name TEXT)");
 
-    let walker = TokenWalker::new(&tokens);
+    let walker = Parser::new(lexer).unwrap();
     let query = parse_create_query(walker);
 
     let mut row_type = VecMap::new();
@@ -52,20 +51,19 @@ fn create_table_no_modifiers() {
 }
 #[test]
 fn create_table_unknown_modifier() {
-    let tokens = tokenize("CREATE TABLE IF NOT EXISTS users (id INT baba)").unwrap();
+    let lexer = Lexer::new("CREATE TABLE IF NOT EXISTS users (id INT baba)");
 
-    let walker = TokenWalker::new(&tokens);
+    let walker = Parser::new(lexer).unwrap();
     let query = parse_create_query(walker);
 
     assert_eq!(query, Err(ParseError::UnknownModifier { modifier: "baba" }))
 }
 #[test]
 fn create_table_unexpected_token() {
-    let tokens =
-        tokenize("CREATE TABLE IF NOT EXISTS%users (id INT PRIMARY KEY, name TEXT NOT NULL)")
-            .unwrap();
-    println!("{:?}", tokens);
-    let walker = TokenWalker::new(&tokens);
+    let lexer =
+        Lexer::new("CREATE TABLE IF NOT EXISTS%users (id INT PRIMARY KEY, name TEXT NOT NULL)");
+    println!("{:?}", lexer);
+    let walker = Parser::new(lexer).unwrap();
     let query = parse_create_query(walker);
     println!("{:?}", query);
     assert!(matches!(query, Err(ParseError::Other { message: _ })))

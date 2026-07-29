@@ -4,17 +4,16 @@ use query::{
 };
 
 use crate::{
-    common::{ParseError, TokenWalker},
+    common::{ParseError, Parser},
+    lexer::Lexer,
     queries::query::parse_update_query,
-    tokenizer::tokenize,
 };
 
 // 1. Successful test: Basic UPDATE query without WHERE clause
 #[test]
 fn update_basic() {
-    let tokens = tokenize("UPDATE users SET age=25").unwrap();
-    let walker = TokenWalker::new(&tokens);
-
+    let lexer = Lexer::new("UPDATE users SET age=25");
+    let walker = Parser::new(lexer).unwrap();
     let res = parse_update_query(walker);
 
     if let Ok(Query::Update(query)) = res {
@@ -24,6 +23,7 @@ fn update_basic() {
         assert_eq!(query.set_exprs()[0].1, Expr::Literal(LiteralValue::Int(25)));
         assert!(query.filter_expr().is_none());
     } else {
+        println!("{:?}", res);
         panic!("Expected update query");
     }
 }
@@ -31,8 +31,8 @@ fn update_basic() {
 // 2. Successful test: UPDATE query with multiple field assignments
 #[test]
 fn update_multiple_fields() {
-    let tokens = tokenize("UPDATE users SET age=25, name='John'").unwrap();
-    let walker = TokenWalker::new(&tokens);
+    let lexer = Lexer::new("UPDATE users SET age=25, name='John'");
+    let walker = Parser::new(lexer).unwrap();
 
     let res = parse_update_query(walker);
 
@@ -56,11 +56,10 @@ fn update_multiple_fields() {
 // 3. Successful test: UPDATE query with WHERE clause
 #[test]
 fn update_with_where() {
-    let tokens = tokenize("UPDATE users SET age=25 WHERE age > 18").unwrap();
-    let walker = TokenWalker::new(&tokens);
+    let lexer = Lexer::new("UPDATE users SET age=25 WHERE age > 18");
+    let walker = Parser::new(lexer).unwrap();
 
     let res = parse_update_query(walker);
-    println!("{:?}", res);
     if let Ok(Query::Update(query)) = res {
         assert_eq!(query.table_name(), "users");
         assert_eq!(query.set_exprs().len(), 1);
@@ -68,6 +67,7 @@ fn update_with_where() {
         assert_eq!(query.set_exprs()[0].1, Expr::Literal(LiteralValue::Int(25)));
         assert!(query.filter_expr().is_some());
     } else {
+        println!("{:?}", res);
         panic!("Expected update query");
     }
 }
@@ -75,8 +75,8 @@ fn update_with_where() {
 // 4. Test on error: Table name starts with digit (invalid identifier)
 #[test]
 fn invalid_table_name() {
-    let tokens = tokenize("UPDATE 123users SET age=25").unwrap();
-    let walker = TokenWalker::new(&tokens);
+    let lexer = Lexer::new("UPDATE 123users SET age=25");
+    let walker = Parser::new(lexer).unwrap();
 
     let res = parse_update_query(walker);
     assert!(res.is_err());
@@ -90,8 +90,8 @@ fn invalid_table_name() {
 // 5. Test on error: Missing SET clause after UPDATE
 #[test]
 fn missing_set_clause() {
-    let tokens = tokenize("UPDATE users").unwrap();
-    let walker = TokenWalker::new(&tokens);
+    let lexer = Lexer::new("UPDATE users");
+    let walker = Parser::new(lexer).unwrap();
 
     let res = parse_update_query(walker);
     assert!(res.is_err());
@@ -105,8 +105,8 @@ fn missing_set_clause() {
 // 6. Test on error: Invalid field name in SET clause (should be identifier)
 #[test]
 fn invalid_field_name() {
-    let tokens = tokenize("UPDATE users SET 123age=25").unwrap();
-    let walker = TokenWalker::new(&tokens);
+    let lexer = Lexer::new("UPDATE users SET 123age=25");
+    let walker = Parser::new(lexer).unwrap();
 
     let res = parse_update_query(walker);
     assert!(res.is_err());

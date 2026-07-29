@@ -1,13 +1,13 @@
 use criterion::{Criterion, Throughput, criterion_group, criterion_main};
+use parser::lexer::Lexer;
 use parser::queries::query::parse_query;
-use parser::tokenizer::tokenize;
 use std::hint::black_box;
 
 // Helper macro to query_parse a string cleanly in tests
 macro_rules! query_parse {
     ($input:expr) => {{
-        let tokens = tokenize($input).unwrap();
-        parse_query(tokens)
+        let lexer = Lexer::new($input);
+        parse_query(lexer)
     }};
 }
 

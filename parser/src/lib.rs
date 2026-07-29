@@ -1,21 +1,21 @@
 use query::{Query, QueryRequest};
 
-use crate::{queries::query::parse_query, tokenizer::tokenize};
+use crate::{lexer::Lexer, queries::query::parse_query};
 pub use common::{ExpectExprErr, ParseError};
 
 #[doc(hidden)]
 pub mod common;
 #[doc(hidden)]
-pub mod queries;
+pub mod lexer;
 #[doc(hidden)]
-pub mod tokenizer;
+pub mod queries;
 
 pub fn parse_query_request<'a>(source: &'a str) -> Result<QueryRequest, ParseError<'a>> {
     let queries = source
         .split(';')
         .filter(|x| !x.is_empty())
         .map(|x| {
-            let tokens = tokenize(x)?;
+            let tokens = Lexer::new(x);
             Ok(parse_query(tokens)?)
         })
         .collect::<Result<Vec<Query>, ParseError>>()?;

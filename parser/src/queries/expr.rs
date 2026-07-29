@@ -3,11 +3,11 @@ use std::collections::HashMap;
 use query::expr::{ArithmeticOp, ComparisonOp, Expr, LiteralValue, LogicOp};
 
 use crate::common::{
-    ExpectExprErr, ParseError, TokenWalker, parse_bool_null_literal, parse_field_name,
+    ExpectExprErr, ParseError, Parser, parse_bool_null_literal, parse_field_name,
     parse_number_literal,
 };
 
-use crate::tokenizer::{Delimiter, Keyword, Sign, TokenValue};
+use crate::lexer::{Delimiter, Keyword, Sign, TokenValue};
 
 /// This is for future optimization
 pub type Prefix = HashMap<TokenValue<'static>, Vec<usize>>;
@@ -19,21 +19,18 @@ pub type ExprParseResult<'a, E> = Result<E, ParseError<'a>>;
 //     }
 // }
 /// Entry function for expression parsing.
-pub fn parse_expr<'a, 'b>(
-    walker: &mut TokenWalker<'a, '_>,
-    end: usize,
-) -> ExprParseResult<'a, Expr> {
-    let expr = parse_or(walker, end)?;
-    if let Some(next_token) = walker.peek_next() {
-        match next_token {
+pub fn parse_expr<'a, 'b>(parser: &mut Parser<'a>, end: usize) -> ExprParseResult<'a, Expr> {
+    let expr = parse_or(parser, end)?;
+    if parser.position() != end {
+        match parser.peek_next() {
             TokenValue::Ident(_)
             | TokenValue::TextLiteral(_)
             | TokenValue::Keyword(_)
             | TokenValue::Delimiter(Delimiter::RoundOpen) => {
-                if walker.position() != end - 1 {
+                if parser.position() != end - 1 {
                     return Err(ParseError::UnexpectedSymbol {
                         expected: "operator or end of expression",
-                        given: next_token.as_str(),
+                        given: parser.peek_next().as_str(),
                     });
                 }
             }
@@ -43,14 +40,14 @@ pub fn parse_expr<'a, 'b>(
     Ok(expr)
 }
 
-pub fn parse_or<'a>(walker: &mut TokenWalker<'a, '_>, end: usize) -> ExprParseResult<'a, Expr> {
-    let mut left = parse_and(walker, end)?;
+pub fn parse_or<'a>(parser: &mut Parser<'a>, end: usize) -> ExprParseResult<'a, Expr> {
+    let mut left = parse_and(parser, end)?;
 
-    while walker.position() < end {
-        if let Some(TokenValue::Keyword(k)) = walker.peek_next() {
-            if *k == Keyword::Or {
-                walker.next(); // skip OR keyword
-                let right = parse_and(walker, end)?;
+    while parser.lexer().position() < end {
+        if let TokenValue::Keyword(k) = parser.peek_next() {
+            if k == Keyword::Or {
+                parser.advance()?; // Skip OR keyword
+                let right = parse_and(parser, end)?;
                 left = Expr::Logical(Box::new(LogicOp::Or(left, right)));
                 continue;
             }
@@ -60,14 +57,14 @@ pub fn parse_or<'a>(walker: &mut TokenWalker<'a, '_>, end: usize) -> ExprParseRe
     Ok(left)
 }
 
-pub fn parse_and<'a>(walker: &mut TokenWalker<'a, '_>, end: usize) -> ExprParseResult<'a, Expr> {
-    let mut left = parse_not(walker, end)?;
+pub fn parse_and<'a>(parser: &mut Parser<'a>, end: usize) -> ExprParseResult<'a, Expr> {
+    let mut left = parse_not(parser, end)?;
 
-    while walker.position() < end {
-        if let Some(TokenValue::Keyword(k)) = walker.peek_next() {
-            if *k == Keyword::And {
-                walker.next();
-                let right = parse_not(walker, end)?;
+    while parser.lexer().position() < end {
+        if let TokenValue::Keyword(k) = parser.peek_next() {
+            if k == Keyword::And {
+                parser.advance()?; // Skip AND keyword
+                let right = parse_not(parser, end)?;
                 left = Expr::Logical(Box::new(LogicOp::And(left, right)));
                 continue;
             }
@@ -77,33 +74,28 @@ pub fn parse_and<'a>(walker: &mut TokenWalker<'a, '_>, end: usize) -> ExprParseR
     Ok(left)
 }
 
-pub fn parse_not<'a>(walker: &mut TokenWalker<'a, '_>, end: usize) -> ExprParseResult<'a, Expr> {
-    if let Some(TokenValue::Keyword(k)) = walker.peek_next() {
-        if *k == Keyword::Not {
-            walker.next();
-            let right = parse_not(walker, end)?;
+pub fn parse_not<'a>(parser: &mut Parser<'a>, end: usize) -> ExprParseResult<'a, Expr> {
+    if let TokenValue::Keyword(k) = parser.peek_next() {
+        if k == Keyword::Not {
+            parser.advance()?; // Skip NOT keyword
+            let right = parse_not(parser, end)?;
             return Ok(Expr::Logical(Box::new(LogicOp::Not(right))));
         }
     }
-    parse_comparison(walker, end)
+    parse_comparison(parser, end)
 }
 
-pub fn parse_comparison<'a>(
-    walker: &mut TokenWalker<'a, '_>,
-    end: usize,
-) -> ExprParseResult<'a, Expr> {
-    let left = parse_add_sub(walker, end)?;
+pub fn parse_comparison<'a>(parser: &mut Parser<'a>, end: usize) -> ExprParseResult<'a, Expr> {
+    let left = parse_add_sub(parser, end)?;
 
-    if walker.position() < end {
-        if let Some(TokenValue::Sign(s)) = walker.peek_next() {
-            let s = *s;
-
+    if parser.lexer().position() < end {
+        if let TokenValue::Sign(s) = parser.peek_next() {
             if matches!(
                 s,
                 Sign::Less | Sign::LessEq | Sign::Greater | Sign::GreaterEq | Sign::Eq | Sign::Neq
             ) {
-                walker.next();
-                let right = parse_add_sub(walker, end)?;
+                parser.advance()?; // Skip sign
+                let right = parse_add_sub(parser, end)?;
                 return Ok(Expr::Comparison(Box::new(match s {
                     Sign::Less => ComparisonOp::Less(left, right),
                     Sign::LessEq => ComparisonOp::LessEq(left, right),
@@ -119,18 +111,14 @@ pub fn parse_comparison<'a>(
     Ok(left)
 }
 
-pub fn parse_add_sub<'a>(
-    walker: &mut TokenWalker<'a, '_>,
-    end: usize,
-) -> ExprParseResult<'a, Expr> {
-    let mut left = parse_mul_div_mod(walker, end)?;
+pub fn parse_add_sub<'a>(parser: &mut Parser<'a>, end: usize) -> ExprParseResult<'a, Expr> {
+    let mut left = parse_mul_div_mod(parser, end)?;
 
-    while walker.position() < end {
-        if let Some(TokenValue::Sign(s)) = walker.peek_next() {
-            let s = *s;
+    while parser.lexer().position() < end {
+        if let TokenValue::Sign(s) = parser.peek_next() {
             if matches!(s, Sign::Plus | Sign::Minus) {
-                walker.next();
-                let right = parse_mul_div_mod(walker, end).map_err(|e| {
+                parser.advance()?; // Skip sign
+                let right = parse_mul_div_mod(parser, end).map_err(|e| {
                     if let ParseError::UnexpectedEof = e {
                         ParseError::ExpectedExpr(ExpectExprErr::After { symbol: s.as_str() })
                     } else {
@@ -150,18 +138,14 @@ pub fn parse_add_sub<'a>(
     Ok(left)
 }
 
-pub fn parse_mul_div_mod<'a>(
-    walker: &mut TokenWalker<'a, '_>,
-    end: usize,
-) -> ExprParseResult<'a, Expr> {
-    let mut left = parse_primary(walker, end)?;
+pub fn parse_mul_div_mod<'a>(parser: &mut Parser<'a>, end: usize) -> ExprParseResult<'a, Expr> {
+    let mut left = parse_primary(parser, end)?;
 
-    while walker.position() < end {
-        if let Some(TokenValue::Sign(s)) = walker.peek_next() {
-            let s = *s;
+    while parser.lexer().position() < end {
+        if let TokenValue::Sign(s) = parser.peek_next() {
             if matches!(s, Sign::Asterisk | Sign::Slash | Sign::Percent) {
-                walker.next();
-                let right = parse_primary(walker, end).map_err(|e| {
+                parser.advance()?; // Skip sign
+                let right = parse_primary(parser, end).map_err(|e| {
                     if let ParseError::UnexpectedEof = e {
                         ParseError::ExpectedExpr(ExpectExprErr::After { symbol: s.as_str() })
                     } else {
@@ -181,38 +165,32 @@ pub fn parse_mul_div_mod<'a>(
     }
     Ok(left)
 }
-pub fn parse_primary<'a>(
-    walker: &mut TokenWalker<'a, '_>,
-    end: usize,
-) -> ExprParseResult<'a, Expr> {
-    if let Some(TokenValue::Delimiter(Delimiter::RoundOpen)) = walker.peek_next() {
-        walker.next();
-        let expr = parse_or(walker, end)?;
-        let closing = walker.next().ok_or(ParseError::UnclosedBracket(')'))?;
-        if closing != &TokenValue::Delimiter(Delimiter::RoundClose) {
+pub fn parse_primary<'a>(parser: &mut Parser<'a>, end: usize) -> ExprParseResult<'a, Expr> {
+    if let TokenValue::Delimiter(Delimiter::RoundOpen) = parser.peek_next() {
+        parser.advance()?; // Skip parenthesis
+        let expr = parse_or(parser, end)?;
+        let closing = parser.consume()?; // Consume closing parenth
+        if closing != TokenValue::Delimiter(Delimiter::RoundClose) {
             return Err(ParseError::UnclosedBracket(')'));
         }
         return Ok(expr);
     }
 
-    parse_literal_or_field(walker, end)
+    parse_literal_or_field(parser, end)
 }
 
 /// I guess it's pretty self-explanatory
-pub fn parse_literal_or_field<'a>(
-    walker: &mut TokenWalker<'a, '_>,
-    _: usize,
-) -> ExprParseResult<'a, Expr> {
-    let token = walker.peek_next().ok_or(ParseError::UnexpectedEof)?;
+pub fn parse_literal_or_field<'a>(parser: &mut Parser<'a>, _: usize) -> ExprParseResult<'a, Expr> {
+    let token = parser.peek_next();
     match token {
         TokenValue::Ident(ident) => {
             if ident.chars().all(char::is_numeric) {
                 return Ok(Expr::Literal(
-                    LiteralValue::from_value(parse_number_literal(walker)?)
+                    LiteralValue::from_value(parse_number_literal(parser)?)
                         .expect("Got non-number output from parse_number_literal() function"),
                 ));
             }
-            Ok(Expr::Field(parse_field_access(walker)?))
+            Ok(Expr::Field(parse_field_access(parser)?))
         }
         TokenValue::Delimiter(delimiter) => match delimiter {
             _ => Err(ParseError::UnexpectedSymbol {
@@ -222,11 +200,11 @@ pub fn parse_literal_or_field<'a>(
         },
         TokenValue::Sign(sign) => match sign {
             Sign::Minus => Ok(Expr::Literal(
-                LiteralValue::from_value(parse_number_literal(walker)?)
+                LiteralValue::from_value(parse_number_literal(parser)?)
                     .expect("Got non-number output from parse_number_literal() function"),
             )),
             s => match s {
-                Sign::Plus | Sign::Minus | Sign::Asterisk | Sign::Slash | Sign::Percent => {
+                Sign::Plus | Sign::Asterisk | Sign::Slash | Sign::Percent => {
                     Err(ParseError::ExpectedExpr(ExpectExprErr::Before {
                         symbol: token.as_str(),
                     }))
@@ -238,22 +216,23 @@ pub fn parse_literal_or_field<'a>(
             },
         },
         TokenValue::Keyword(keyword) => {
-            if *keyword == Keyword::And || *keyword == Keyword::Or {
+            if keyword == Keyword::And || keyword == Keyword::Or {
                 return Err(ParseError::ExpectedExpr(ExpectExprErr::Before {
                     symbol: token.as_str(),
                 }));
             }
             Ok(Expr::Literal(
-                LiteralValue::from_value(parse_bool_null_literal(walker)?).expect(
+                LiteralValue::from_value(parse_bool_null_literal(parser)?).expect(
                     "Got non-bool, non-null output from parse_bool_null_literal() function",
                 ),
             ))
         }
         TokenValue::TextLiteral(text) => {
             let lit_value = LiteralValue::Text((*text).to_owned());
-            walker.skip(1);
+            parser.advance()?; // Consume literal
             Ok(Expr::Literal(lit_value))
         }
+        TokenValue::EOF => Err(ParseError::UnexpectedEof),
         _ => Err(ParseError::UnexpectedSymbol {
             expected: "literal or field access",
             given: token.as_str(),
@@ -262,7 +241,7 @@ pub fn parse_literal_or_field<'a>(
 }
 
 #[inline]
-pub fn parse_field_access<'a>(walker: &mut TokenWalker<'a, '_>) -> ExprParseResult<'a, String> {
+pub fn parse_field_access<'a>(walker: &mut Parser<'a>) -> ExprParseResult<'a, String> {
     // Might add some logic
     parse_field_name(walker)
 }
@@ -276,7 +255,7 @@ pub mod test_util {
             let mut tokens = simply_db::sql::parser::tokenizer::tokenize($input);
             tokens.push(simply_db::sql::parser::tokenizer::TokenValue::Blank);
             simply_db::sql::parser::expr::parse_expr(
-                &mut simply_db::sql::parser::common::TokenWalker::new(&tokens),
+                &mut simply_db::sql::parser::common::Parser::new(&tokens),
                 tokens.len(),
             )
         }};
