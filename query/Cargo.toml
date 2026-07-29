@@ -5,15 +5,15 @@ edition = "2024"
 
 [[bench]]
 harness = false
-name = "0_insert"
+name = "0_insert_execution"
 
 [[bench]]
 harness = false
-name = "1_select"
+name = "1_select_execution"
 
 [[bench]]
 harness = false
-name = "2_update"
+name = "2_update_execution"
 
 [dependencies]
 serde = { workspace = true, optional = true }

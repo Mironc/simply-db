@@ -1,5 +1,4 @@
 mod setup;
-use std::panic;
 
 use criterion::{BatchSize, Criterion, Throughput, criterion_group, criterion_main};
 use query::queries::insert::InsertQuery;
@@ -30,7 +29,7 @@ fn criterion_benchmark(c: &mut Criterion) {
         let records = record_spawn();
 
         let batch_size = records.len() as u64;
-        let mut group = c.benchmark_group(format!("insert_{}", batch_size));
+        let mut group = c.benchmark_group(format!("insert_execution_{}", batch_size));
         group.throughput(Throughput::Elements(batch_size));
 
         group.bench_function("single", |b| {
@@ -51,7 +50,7 @@ fn criterion_benchmark(c: &mut Criterion) {
 
         group.finish();
 
-        let mut group = c.benchmark_group(format!("insert_unique_{}", records.len()));
+        let mut group = c.benchmark_group(format!("insert_execution_unique_{}", records.len()));
         group.throughput(Throughput::Elements(batch_size));
 
         group.bench_function("single", |b| {

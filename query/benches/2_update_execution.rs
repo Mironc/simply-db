@@ -28,7 +28,7 @@ fn criterion_benchmark(c: &mut Criterion<WallTimeQps>) {
         let batch_size = records.len();
         let db = init_db();
         insert_records(&db, &records);
-        let mut group = c.benchmark_group(format!("update_{}", batch_size));
+        let mut group = c.benchmark_group(format!("update_execution_{}", batch_size));
         group.throughput(Throughput::Elements(1));
         group.bench_function("update", |b| {
             b.iter_batched_ref(|| db.clone(), |db| update_rows(db), BatchSize::LargeInput);
