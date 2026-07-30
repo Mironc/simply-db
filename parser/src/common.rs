@@ -35,8 +35,6 @@ pub enum ParseError<'a> {
     /// Unexpected start of file
     UnexpectedSof,
     UnknownDataType,
-    UnknownPattern,
-    WrongPattern,
     Other {
         message: &'a str,
     },

@@ -160,8 +160,6 @@ impl From<ParseError<'_>> for ParseErrorDTO {
             ParseError::UnexpectedEof => ParseErrorDTO::UnexpectedEof,
             ParseError::UnexpectedSof => ParseErrorDTO::UnexpectedSof,
             ParseError::UnknownDataType => ParseErrorDTO::UnknownDataType,
-            ParseError::UnknownPattern => ParseErrorDTO::UnknownPattern,
-            ParseError::WrongPattern => ParseErrorDTO::WrongPattern,
             ParseError::Other { message } => ParseErrorDTO::Other {
                 message: message.to_string(),
             },
