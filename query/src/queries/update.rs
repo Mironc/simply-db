@@ -85,7 +85,7 @@ impl UpdateQuery {
                             }
                         }
                         return Err(UpdateError::SetTypeMismatch {
-                            expected: field.1.data_type().clone(),
+                            expected: field.1.data_type(),
                             given: res.clone(),
                         });
                     }

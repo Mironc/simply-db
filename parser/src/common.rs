@@ -97,7 +97,7 @@ impl<'a> Parser<'a> {
 
     #[inline]
     pub fn consume(&mut self) -> ParseResult<'a, TokenValue<'a>> {
-        let _ = self.advance()?;
+        self.advance()?;
         Ok(self.current)
     }
 
@@ -195,7 +195,7 @@ pub fn parse_number_literal<'a>(walker: &mut Parser<'a>) -> ParseResult<'a, Data
             };
         } else {
             return Err(ParseError::Other {
-                message: "After dot expected fractional part of number".into(),
+                message: "After dot expected fractional part of number",
             });
         }
     }

@@ -22,11 +22,7 @@ impl Table {
     /// # Errors
     /// returns `SchemaMismatch` if row fields do not match with the schema in the table.
     /// returns `UniqueConstraint` if some unique field value is already present in the table.
-    pub fn insert_row(
-        &self,
-        field_names: &Vec<String>,
-        mut row: Row,
-    ) -> Result<(), TableInsertError> {
+    pub fn insert_row(&self, field_names: &[String], mut row: Row) -> Result<(), TableInsertError> {
         let index_map = if let Some(index_map) = self.schema.build_index_map(field_names) {
             index_map
         } else {
@@ -48,7 +44,7 @@ impl Table {
     /// returns `UniqueConstraint` if some unique field value is already present in the table or in the other rows.
     pub fn insert_rows(
         &self,
-        field_names: &Vec<String>,
+        field_names: &[String],
         mut rows: Vec<Row>,
     ) -> Result<(), TableInsertError> {
         let mut validated_rows = Vec::with_capacity(rows.len());
@@ -58,7 +54,7 @@ impl Table {
             return Err(TableInsertError::SchemaMismatch);
         };
         let mut temp_buffer = Vec::with_capacity(self.schema.fields().len());
-        for (i, row) in rows.iter_mut().enumerate() {
+        for row in rows.iter_mut() {
             self.validate_row(&index_map, &mut temp_buffer, &validated_rows, row)?;
             validated_rows.push(row.clone());
         }
@@ -74,7 +70,7 @@ impl Table {
     /// returns `UniqueConstraint` if some unique field value is already present in the table or in the other rows.
     pub fn validate_row(
         &self,
-        index_map: &Vec<Option<usize>>,
+        index_map: &[Option<usize>],
         temp_buffer: &mut Vec<DataValue>,
         other_rows: &[Row],
         row: &mut Row,
@@ -83,7 +79,7 @@ impl Table {
             return Err(TableInsertError::SchemaMismatch);
         }
         self.schema
-            .order_row(&index_map, row.data_mut(), temp_buffer);
+            .order_row(index_map, row.data_mut(), temp_buffer);
         let table_rows = self.rows();
         for (id, field) in self.schema.fields().iter().enumerate() {
             if field.1.is_unique() {

@@ -16,11 +16,7 @@ impl<'a> Context<'a> {
         if let Some(fields) = self.fields
             && let Some(schema) = self.schema
         {
-            schema
-                .fields()
-                .get_index(field)
-                .map(|x| fields.get(x))
-                .flatten()
+            schema.fields().get_index(field).and_then(|x| fields.get(x))
         } else {
             None
         }

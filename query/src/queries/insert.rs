@@ -26,7 +26,7 @@ impl InsertQuery {
         if let Some(table) = db.get_table(&self.table) {
             table
                 .insert_rows(&self.field_names, self.rows_data.clone())
-                .map_err(|x| InsertError::TableInsertError(x))
+                .map_err(InsertError::TableInsertError)
         } else {
             Err(InsertError::UnknownTable(self.table.clone()))
         }

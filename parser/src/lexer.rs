@@ -302,7 +302,7 @@ impl<'a> Lexer<'a> {
         if b == b'\'' {
             self.position += 1;
             let start = self.position;
-            // Skip until end or another apostrophe
+            // Skip until end or another apostrophe.
             while self.position < self.source.len()
                 && *unsafe { self.source.get_unchecked(self.position) } != b'\''
             {
@@ -389,9 +389,9 @@ impl<'a> Lexer<'a> {
         }
         let ident = unsafe { str::from_utf8_unchecked(&self.source[start..self.position]) };
         if let Some(keyword) = Keyword::from_str(ident) {
-            return Ok(TokenValue::Keyword(keyword));
+            Ok(TokenValue::Keyword(keyword))
         } else {
-            return Ok(TokenValue::Ident(ident));
+            Ok(TokenValue::Ident(ident))
         }
     }
 

@@ -29,7 +29,7 @@ impl CreateTable {
             return Err(CreateTableError::AlreadyExists);
         }
         let table = Table::new(self.schema.clone());
-        _ = db.insert_table(self.name.clone(), table).unwrap();
+        db.insert_table(self.name.clone(), table).unwrap();
         Ok(())
     }
 }

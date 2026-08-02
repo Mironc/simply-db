@@ -52,7 +52,7 @@ impl Schema {
         Some(index_map)
     }
 
-    pub fn validate(&self, index_map: &[Option<usize>], row: &Vec<DataValue>) -> bool {
+    pub fn validate(&self, index_map: &[Option<usize>], row: &[DataValue]) -> bool {
         for (target_idx, field) in self.fields.values().enumerate() {
             match index_map[target_idx] {
                 Some(src_idx) => {

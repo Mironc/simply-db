@@ -16,7 +16,7 @@ pub fn parse_query_request<'a>(source: &'a str) -> Result<QueryRequest, ParseErr
         .filter(|x| !x.is_empty())
         .map(|x| {
             let tokens = Lexer::new(x);
-            Ok(parse_query(tokens)?)
+            parse_query(tokens)
         })
         .collect::<Result<Vec<Query>, ParseError>>()?;
 

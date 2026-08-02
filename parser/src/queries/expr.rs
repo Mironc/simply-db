@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use query::expr::{ArithmeticOp, ComparisonOp, Expr, LiteralValue, LogicOp};
 
 use crate::common::{
@@ -9,17 +7,10 @@ use crate::common::{
 
 use crate::lexer::{Delimiter, Keyword, Sign, TokenValue};
 
-/// This is for future optimization
-pub type Prefix = HashMap<TokenValue<'static>, Vec<usize>>;
-pub type Cache<'a> = HashMap<(usize, usize), ParseError<'a>, foldhash::fast::FixedState>;
 pub type ExprParseResult<'a, E> = Result<E, ParseError<'a>>;
-// impl From<&'static ParseError<'static>> for ExprParseResult<Expr> {
-//     fn from(value: &'static ParseError<'static>) -> Self {
-//         Err(Cow::Borrowed(value))
-//     }
-// }
+
 /// Entry function for expression parsing.
-pub fn parse_expr<'a, 'b>(parser: &mut Parser<'a>, end: usize) -> ExprParseResult<'a, Expr> {
+pub fn parse_expr<'a>(parser: &mut Parser<'a>, end: usize) -> ExprParseResult<'a, Expr> {
     let expr = parse_or(parser, end)?;
     if parser.position() != end {
         match parser.peek_next() {
@@ -44,13 +35,13 @@ pub fn parse_or<'a>(parser: &mut Parser<'a>, end: usize) -> ExprParseResult<'a, 
     let mut left = parse_and(parser, end)?;
 
     while parser.lexer().position() < end {
-        if let TokenValue::Keyword(k) = parser.peek_next() {
-            if k == Keyword::Or {
-                parser.advance()?; // Skip OR keyword
-                let right = parse_and(parser, end)?;
-                left = Expr::Logical(Box::new(LogicOp::Or(left, right)));
-                continue;
-            }
+        if let TokenValue::Keyword(k) = parser.peek_next()
+            && k == Keyword::Or
+        {
+            parser.advance()?; // Skip OR keyword
+            let right = parse_and(parser, end)?;
+            left = Expr::Logical(Box::new(LogicOp::Or(left, right)));
+            continue;
         }
         break;
     }
@@ -61,13 +52,13 @@ pub fn parse_and<'a>(parser: &mut Parser<'a>, end: usize) -> ExprParseResult<'a,
     let mut left = parse_not(parser, end)?;
 
     while parser.lexer().position() < end {
-        if let TokenValue::Keyword(k) = parser.peek_next() {
-            if k == Keyword::And {
-                parser.advance()?; // Skip AND keyword
-                let right = parse_not(parser, end)?;
-                left = Expr::Logical(Box::new(LogicOp::And(left, right)));
-                continue;
-            }
+        if let TokenValue::Keyword(k) = parser.peek_next()
+            && k == Keyword::And
+        {
+            parser.advance()?; // Skip AND keyword
+            let right = parse_not(parser, end)?;
+            left = Expr::Logical(Box::new(LogicOp::And(left, right)));
+            continue;
         }
         break;
     }
@@ -75,13 +66,14 @@ pub fn parse_and<'a>(parser: &mut Parser<'a>, end: usize) -> ExprParseResult<'a,
 }
 
 pub fn parse_not<'a>(parser: &mut Parser<'a>, end: usize) -> ExprParseResult<'a, Expr> {
-    if let TokenValue::Keyword(k) = parser.peek_next() {
-        if k == Keyword::Not {
-            parser.advance()?; // Skip NOT keyword
-            let right = parse_not(parser, end)?;
-            return Ok(Expr::Logical(Box::new(LogicOp::Not(right))));
-        }
+    if let TokenValue::Keyword(k) = parser.peek_next()
+        && k == Keyword::Not
+    {
+        parser.advance()?; // Skip NOT keyword
+        let right = parse_not(parser, end)?;
+        return Ok(Expr::Logical(Box::new(LogicOp::Not(right))));
     }
+
     parse_comparison(parser, end)
 }
 
@@ -89,23 +81,23 @@ pub fn parse_comparison<'a>(parser: &mut Parser<'a>, end: usize) -> ExprParseRes
     let left = parse_add_sub(parser, end)?;
 
     if parser.lexer().position() < end {
-        if let TokenValue::Sign(s) = parser.peek_next() {
-            if matches!(
+        if let TokenValue::Sign(s) = parser.peek_next()
+            && matches!(
                 s,
                 Sign::Less | Sign::LessEq | Sign::Greater | Sign::GreaterEq | Sign::Eq | Sign::Neq
-            ) {
-                parser.advance()?; // Skip sign
-                let right = parse_add_sub(parser, end)?;
-                return Ok(Expr::Comparison(Box::new(match s {
-                    Sign::Less => ComparisonOp::Less(left, right),
-                    Sign::LessEq => ComparisonOp::LessEq(left, right),
-                    Sign::Greater => ComparisonOp::Greater(left, right),
-                    Sign::GreaterEq => ComparisonOp::GreaterEq(left, right),
-                    Sign::Eq => ComparisonOp::Eq(left, right),
-                    Sign::Neq => ComparisonOp::NotEq(left, right),
-                    _ => unreachable!(),
-                })));
-            }
+            )
+        {
+            parser.advance()?; // Skip sign
+            let right = parse_add_sub(parser, end)?;
+            return Ok(Expr::Comparison(Box::new(match s {
+                Sign::Less => ComparisonOp::Less(left, right),
+                Sign::LessEq => ComparisonOp::LessEq(left, right),
+                Sign::Greater => ComparisonOp::Greater(left, right),
+                Sign::GreaterEq => ComparisonOp::GreaterEq(left, right),
+                Sign::Eq => ComparisonOp::Eq(left, right),
+                Sign::Neq => ComparisonOp::NotEq(left, right),
+                _ => unreachable!(),
+            })));
         }
     }
     Ok(left)
@@ -115,24 +107,25 @@ pub fn parse_add_sub<'a>(parser: &mut Parser<'a>, end: usize) -> ExprParseResult
     let mut left = parse_mul_div_mod(parser, end)?;
 
     while parser.lexer().position() < end {
-        if let TokenValue::Sign(s) = parser.peek_next() {
-            if matches!(s, Sign::Plus | Sign::Minus) {
-                parser.advance()?; // Skip sign
-                let right = parse_mul_div_mod(parser, end).map_err(|e| {
-                    if let ParseError::UnexpectedEof = e {
-                        ParseError::ExpectedExpr(ExpectExprErr::After { symbol: s.as_str() })
-                    } else {
-                        e
-                    }
-                })?;
-                left = Expr::Arithmetic(Box::new(match s {
-                    Sign::Plus => ArithmeticOp::Add(left, right),
-                    Sign::Minus => ArithmeticOp::Subtract(left, right),
-                    _ => unreachable!(),
-                }));
-                continue;
-            }
+        if let TokenValue::Sign(s) = parser.peek_next()
+            && matches!(s, Sign::Plus | Sign::Minus)
+        {
+            parser.advance()?; // Skip sign
+            let right = parse_mul_div_mod(parser, end).map_err(|e| {
+                if let ParseError::UnexpectedEof = e {
+                    ParseError::ExpectedExpr(ExpectExprErr::After { symbol: s.as_str() })
+                } else {
+                    e
+                }
+            })?;
+            left = Expr::Arithmetic(Box::new(match s {
+                Sign::Plus => ArithmeticOp::Add(left, right),
+                Sign::Minus => ArithmeticOp::Subtract(left, right),
+                _ => unreachable!(),
+            }));
+            continue;
         }
+
         break;
     }
     Ok(left)
@@ -142,24 +135,24 @@ pub fn parse_mul_div_mod<'a>(parser: &mut Parser<'a>, end: usize) -> ExprParseRe
     let mut left = parse_primary(parser, end)?;
 
     while parser.lexer().position() < end {
-        if let TokenValue::Sign(s) = parser.peek_next() {
-            if matches!(s, Sign::Asterisk | Sign::Slash | Sign::Percent) {
-                parser.advance()?; // Skip sign
-                let right = parse_primary(parser, end).map_err(|e| {
-                    if let ParseError::UnexpectedEof = e {
-                        ParseError::ExpectedExpr(ExpectExprErr::After { symbol: s.as_str() })
-                    } else {
-                        e
-                    }
-                })?;
-                left = Expr::Arithmetic(Box::new(match s {
-                    Sign::Asterisk => ArithmeticOp::Multiply(left, right),
-                    Sign::Slash => ArithmeticOp::Divide(left, right),
-                    Sign::Percent => ArithmeticOp::Modulo(left, right),
-                    _ => unreachable!(),
-                }));
-                continue;
-            }
+        if let TokenValue::Sign(s) = parser.peek_next()
+            && matches!(s, Sign::Asterisk | Sign::Slash | Sign::Percent)
+        {
+            parser.advance()?; // Skip sign
+            let right = parse_primary(parser, end).map_err(|e| {
+                if let ParseError::UnexpectedEof = e {
+                    ParseError::ExpectedExpr(ExpectExprErr::After { symbol: s.as_str() })
+                } else {
+                    e
+                }
+            })?;
+            left = Expr::Arithmetic(Box::new(match s {
+                Sign::Asterisk => ArithmeticOp::Multiply(left, right),
+                Sign::Slash => ArithmeticOp::Divide(left, right),
+                Sign::Percent => ArithmeticOp::Modulo(left, right),
+                _ => unreachable!(),
+            }));
+            continue;
         }
         break;
     }
@@ -192,12 +185,10 @@ pub fn parse_literal_or_field<'a>(parser: &mut Parser<'a>, _: usize) -> ExprPars
             }
             Ok(Expr::Field(parse_field_access(parser)?))
         }
-        TokenValue::Delimiter(delimiter) => match delimiter {
-            _ => Err(ParseError::UnexpectedSymbol {
-                expected: "literal or field access",
-                given: token.as_str(),
-            }),
-        },
+        TokenValue::Delimiter(_) => Err(ParseError::UnexpectedSymbol {
+            expected: "literal or field access",
+            given: token.as_str(),
+        }),
         TokenValue::Sign(sign) => match sign {
             Sign::Minus => Ok(Expr::Literal(
                 LiteralValue::from_value(parse_number_literal(parser)?)
