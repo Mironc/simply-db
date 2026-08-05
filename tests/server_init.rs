@@ -13,14 +13,12 @@ pub struct ServerInstance {
 
 impl ServerInstance {
     pub async fn new() -> std::io::Result<Self> {
-        let listener = TcpListener::bind(format!("{}:0", BASE_IP)).await.unwrap(); //
+        let exe_path = env!("CARGO_BIN_EXE_server");
+        let listener = TcpListener::bind(format!("{}:0", BASE_IP)).await.unwrap();
         let assigned_port = listener.local_addr().unwrap().port();
         let listen_ip = format!("{}:{}", BASE_IP, assigned_port);
-        let process = std::process::Command::new("cargo")
-            .args(["run", "--bin", "server", "--all-features"])
-            .arg("--")
-            .arg("--listen-ip")
-            .arg(&listen_ip)
+        let process = std::process::Command::new(exe_path)
+            .args(["--listen-ip", &listen_ip])
             .spawn()?;
         Ok(Self { process, listen_ip })
     }
