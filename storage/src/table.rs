@@ -19,9 +19,10 @@ impl Table {
     }
     /// Inserts single row. Returns nothing on success.
     ///
-    /// # Errors
-    /// returns `SchemaMismatch` if row fields do not match with the schema in the table.
-    /// returns `UniqueConstraint` if some unique field value is already present in the table.
+    /// # Errors:
+    /// - returns `SchemaMismatch` if row fields do not match with the schema in the table.
+    ///
+    /// - returns `UniqueConstraint` if some unique field value is already present in the table.
     pub fn insert_row(&self, field_names: &[String], mut row: Row) -> Result<(), TableInsertError> {
         let index_map = if let Some(index_map) = self.schema.build_index_map(field_names) {
             index_map
@@ -39,9 +40,10 @@ impl Table {
     }
     /// Inserts multiple rows at once. Returns nothing on success.
     ///
-    /// # Errors
-    /// returns `SchemaMismatch` if row fields do not match with the schema in the table.
-    /// returns `UniqueConstraint` if some unique field value is already present in the table or in the other rows.
+    /// # Errors:
+    /// - returns `SchemaMismatch` if row fields do not match with the schema in the table.
+    ///
+    /// - returns `UniqueConstraint` if some unique field value is already present in the table or in the other rows.
     pub fn insert_rows(
         &self,
         field_names: &[String],
@@ -65,9 +67,10 @@ impl Table {
     }
     /// Validates row against table and other rows in one insert request
     ///
-    /// # Errors
-    /// returns `SchemaMismatch` if row fields do not match with the schema in the table.
-    /// returns `UniqueConstraint` if some unique field value is already present in the table or in the other rows.
+    /// # Errors:
+    /// - returns `SchemaMismatch` if row fields do not match with the schema in the table.
+    ///
+    /// - returns `UniqueConstraint` if some unique field value is already present in the table or in the other rows.
     pub fn validate_row(
         &self,
         index_map: &[Option<usize>],
