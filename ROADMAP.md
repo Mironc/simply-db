@@ -75,7 +75,7 @@ They are used in projections, set statements and filtering.
 
 - [x] Simple. Example: `UPDATE users SET age=age+1`.
 - [x] Filtering. Example: `UPDATE users SET email=NULL WHERE id == 0`.
-- [ ] ~~Unique constraint check after update~~.
+- [x] Unique constraint check after update.
 - [ ] ~~Update affected indexes~~.
 
 ## DROP
