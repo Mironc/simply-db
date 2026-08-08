@@ -1,5 +1,7 @@
 #[cfg(test)]
 mod create_table_tests;
+#[cfg(test)]
+mod delete_tests;
 pub mod expr;
 #[cfg(test)]
 mod expr_tests;
