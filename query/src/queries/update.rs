@@ -20,12 +20,15 @@ pub enum UpdateError {
     NoField {
         field: String,
     },
-    NullExpection {
+    UnexpectedNull {
         field: String,
     },
     SetTypeMismatch {
         expected: ScalarType,
         given: DataValue,
+    },
+    UniqueConstraint {
+        field: String,
     },
     /// Filter expression returns not bool
     BadExpr,
@@ -54,56 +57,93 @@ impl UpdateQuery {
         let table = db.get_table(&self.table).ok_or(UpdateError::NoTable {
             table: self.table.to_owned(),
         })?;
-        let schema = table.schema().clone();
-        for row in table.rows_mut().iter_mut() {
-            let context = Context::new(row.data(), &schema);
+        let mut row_modifications = Vec::new();
+
+        let filter_function: Box<dyn for<'a> Fn(&Context<'a>) -> Result<bool, UpdateError>> =
             if let Some(expr) = &self.filter_expr {
-                if let DataValue::Scalar(ScalarValue::Bool(b)) = expr.execute(&context)?.deref() {
-                    if !b {
-                        continue;
-                    }
-                } else {
-                    return Err(UpdateError::BadExpr);
-                }
-            }
-            let mut values = Vec::new();
-            for (set_field, set_expr) in self.set_exprs().iter() {
-                let res = set_expr.execute(&context)?.into_owned();
-                if let Some(field) = schema.fields().iter().find(|x| x.0 == *set_field) {
-                    if let DataValue::Scalar(scalar_value) = &res
-                        && field.1.data_type() == scalar_value.scalar_type()
+                Box::new(|context: &Context<'_>| {
+                    if let data_value = expr.execute(&context)?.deref()
+                        && let DataValue::Scalar(ScalarValue::Bool(b)) = data_value
                     {
-                        values.push((set_field, res));
+                        Ok(*b)
                     } else {
-                        if matches!(res, DataValue::Null) && !field.1.is_nullable() {
-                            if !field.1.is_nullable() {
-                                return Err(UpdateError::NullExpection {
-                                    field: set_field.clone(),
-                                });
-                            } else {
-                                values.push((set_field, DataValue::Null));
-                            }
-                        }
-                        return Err(UpdateError::SetTypeMismatch {
-                            expected: field.1.data_type(),
-                            given: res.clone(),
+                        return Err(UpdateError::BadExpr);
+                    }
+                })
+            } else {
+                Box::new(|_: &Context<'_>| Ok(true))
+            };
+
+        let mut prepared_updates = Vec::new();
+        for (set_field, set_expr) in self.set_exprs().iter() {
+            let (field_id, (field_name, field)) = table
+                .schema()
+                .fields()
+                .iter()
+                .enumerate()
+                .find(|x| x.1.0 == *set_field)
+                .ok_or_else(|| UpdateError::NoField {
+                    field: set_field.clone(),
+                })?;
+            prepared_updates.push((field_id, field_name, field, set_expr));
+        }
+
+        for (i, row) in table.rows().iter().enumerate() {
+            let context = Context::new(row.data(), table.schema());
+            if !filter_function(&context)? {
+                continue;
+            }
+            let mut modifications = Vec::with_capacity(prepared_updates.len());
+
+            for &(field_id, field_name, field, set_expr) in prepared_updates.iter() {
+                let res = set_expr.execute(&context)?.into_owned();
+                // Uniqueness check
+                if field.is_unique() {
+                    if table.rows().iter().enumerate().any(|(id, row)| {
+                        row.data()[field_id] == res
+                            && row_modifications
+                                .binary_search_by(|x: &(usize, Vec<(usize, DataValue)>)| {
+                                    x.0.cmp(&id)
+                                })
+                                .is_err()
+                            && id != i
+                    }) || row_modifications.iter().any(|x| {
+                        x.1.iter()
+                            .any(|(mod_field_id, val)| *mod_field_id == field_id && val == &res)
+                    }) {
+                        return Err(UpdateError::UniqueConstraint {
+                            field: field_name.to_owned(),
                         });
                     }
+                }
+
+                if let DataValue::Scalar(scalar_value) = &res
+                    && field.data_type() == scalar_value.scalar_type()
+                {
+                    modifications.push((field_id, res));
                 } else {
-                    return Err(UpdateError::NoField {
-                        field: set_field.clone(),
+                    if res == DataValue::Null {
+                        if field.is_nullable() {
+                            modifications.push((field_id, DataValue::Null));
+                            continue;
+                        } else {
+                            return Err(UpdateError::UnexpectedNull {
+                                field: field_name.clone(),
+                            });
+                        }
+                    }
+                    return Err(UpdateError::SetTypeMismatch {
+                        expected: field.data_type(),
+                        given: res.clone(),
                     });
                 }
             }
-            for (set_field, value) in values.into_iter() {
-                let set_idx = schema
-                    .fields()
-                    .get_index(set_field)
-                    .expect("Expected valid set_field");
-                *(row
-                    .data_mut()
-                    .get_mut(set_idx)
-                    .expect("Should be a valid field")) = value.clone();
+
+            row_modifications.push((i, modifications));
+        }
+        for (i, new_row) in row_modifications.into_iter() {
+            for (field_id, modification) in new_row.into_iter() {
+                table.rows_mut()[i].data_mut()[field_id] = modification;
             }
         }
         Ok(())
