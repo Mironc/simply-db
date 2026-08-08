@@ -9,6 +9,8 @@ mod expr_tests;
 mod insert_tests;
 pub mod query;
 #[cfg(test)]
+mod query_tests;
+#[cfg(test)]
 mod select_tests;
 #[cfg(test)]
 mod update_tests;

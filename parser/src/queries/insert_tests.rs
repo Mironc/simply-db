@@ -4,7 +4,7 @@ use storage::{row::Row, scalar};
 use crate::{
     common::{ParseError, Parser},
     lexer::Lexer,
-    queries::query::{parse_insert_data, parse_insert_fields, parse_insert_query, parse_query},
+    queries::query::{parse_insert_data, parse_insert_fields, parse_insert_query},
 };
 
 #[test]
@@ -78,7 +78,8 @@ fn insert_row_count_mismatch() {
 fn insert_query() {
     // Test insert query with multiple fields one row
     let lexer = Lexer::new("INSERT INTO table (int, string) VALUES (100, 'text' )");
-    let insert_query = parse_query(lexer);
+    let parser = Parser::new(lexer).unwrap();
+    let insert_query = parse_insert_query(parser);
     let values = vec![scalar!(Int(100)), scalar!(Text("text"))];
     let cmp_query = InsertQuery::new(
         "table".to_owned(),
