@@ -36,7 +36,7 @@ If feature is marked with Out-Of-Scope that means it likely won't be ever implem
 - [x] PRIMARY KEY. But it isn't enforced to be unique in the table schema.
 - [ ] CHECK.
 - [ ] DEFAULT.
-- [ ] AUTOINCREMENT.
+- [x] AUTOINCREMENT.
 - [ ] FOREIGN KEY.
 
 ## Expressions
@@ -95,7 +95,7 @@ They are used in projections, set statements and filtering.
 - [x] Simple. Example: `TRUNCATE TABLE users`.
 - [ ] ~~Clear indexes~~.
 - [ ] ~~FOREIGN KEY constraint check~~. Restrict.
-- [ ] ~~AUTOINCREMENT counter reset~~.
+- [x] AUTOINCREMENT counter reset.
 
 # Client
 
