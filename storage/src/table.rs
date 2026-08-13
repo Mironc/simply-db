@@ -60,32 +60,32 @@ impl Table {
     pub fn insert_rows(
         &self,
         field_names: &[String],
-        rows: Vec<Row>,
+        mut rows: Vec<Row>,
     ) -> Result<(), TableInsertError> {
-        let mut validated_rows = Vec::with_capacity(rows.len());
         let index_map = if let Some(index_map) = self.schema.build_index_map(field_names) {
             index_map
         } else {
             return Err(TableInsertError::SchemaMismatch);
         };
         let mut temp_buffer = Vec::with_capacity(self.schema.fields().len());
-        for mut row in rows.into_iter() {
-            self.validate_row(&index_map, &mut temp_buffer, &validated_rows, &mut row)?;
-            validated_rows.push(row);
+        for i in 0..rows.len() {
+            let (l, r) = rows.split_at_mut(i + 1);
+            let row = &mut l[i];
+            self.validate_row(&index_map, &mut temp_buffer, r, row)?;
         }
         if let Some(ai_idx) = self.schema.autoincrement_field() {
-            let batch_size = validated_rows.len() as u64;
+            let batch_size = rows.len() as u64;
             let start_id = self.counter.fetch_add(batch_size, Ordering::SeqCst);
 
             let mut table_rows = self.rows_mut();
-            for (i, mut row) in validated_rows.into_iter().enumerate() {
+            for (i, mut row) in rows.into_iter().enumerate() {
                 let current_id = start_id + i as u64;
 
                 row.data_mut()[ai_idx] = DataValue::Scalar(ScalarValue::Int(current_id as i32));
                 table_rows.push(row);
             }
         } else {
-            for row in validated_rows.into_iter() {
+            for row in rows.into_iter() {
                 self.rows_mut().push(row);
             }
         }
