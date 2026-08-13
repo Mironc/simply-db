@@ -53,7 +53,7 @@ impl UpdateQuery {
             filter_expr,
         }
     }
-    pub fn execute(&self, db: &Database) -> Result<(), UpdateError> {
+    pub fn execute(self, db: &Database) -> Result<(), UpdateError> {
         let table = db.get_table(&self.table).ok_or(UpdateError::NoTable {
             table: self.table.to_owned(),
         })?;

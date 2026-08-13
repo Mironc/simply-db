@@ -81,7 +81,7 @@ impl SelectQuery {
         }
     }
 
-    pub fn execute(&self, db: &Database) -> Result<Vec<Vec<DataValue>>, SelectError> {
+    pub fn execute(self, db: &Database) -> Result<Vec<Vec<DataValue>>, SelectError> {
         let table = db.get_table(&self.table).ok_or(SelectError::NoTable {
             table: self.table.to_owned(),
         })?;

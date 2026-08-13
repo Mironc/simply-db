@@ -22,13 +22,13 @@ impl InsertQuery {
         }
     }
 
-    pub fn execute(&self, db: &Database) -> Result<(), InsertError> {
+    pub fn execute(self, db: &Database) -> Result<(), InsertError> {
         if let Some(table) = db.get_table(&self.table) {
             table
-                .insert_rows(&self.field_names, self.rows_data.clone())
+                .insert_rows(&self.field_names, self.rows_data)
                 .map_err(InsertError::TableInsertError)
         } else {
-            Err(InsertError::UnknownTable(self.table.clone()))
+            Err(InsertError::UnknownTable(self.table))
         }
     }
 }

@@ -71,7 +71,7 @@ pub enum Query {
     Delete(DeleteQuery),
 }
 impl Query {
-    pub fn apply(&self, db: &Database) -> Result<QueryOutput, QueryError> {
+    pub fn apply(self, db: &Database) -> Result<QueryOutput, QueryError> {
         Ok(match self {
             Query::Select(filter_query) => filter_query.execute(db)?.into(),
             Query::Insert(insert_query) => insert_query.execute(db)?.into(),
@@ -89,9 +89,9 @@ impl QueryRequest {
     pub fn new(queries: Vec<Query>) -> Self {
         Self { queries }
     }
-    pub fn execute(&self, db: &Database) -> Vec<Result<QueryOutput, QueryError>> {
+    pub fn execute(self, db: &Database) -> Vec<Result<QueryOutput, QueryError>> {
         let mut results = Vec::new();
-        for query in self.queries.iter() {
+        for query in self.queries.into_iter() {
             let res = query.apply(db);
             results.push(res);
         }

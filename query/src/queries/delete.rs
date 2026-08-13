@@ -31,7 +31,7 @@ pub enum DeleteQuery {
 }
 
 impl DeleteQuery {
-    pub fn execute(&self, db: &Database) -> Result<(), DeleteError> {
+    pub fn execute(self, db: &Database) -> Result<(), DeleteError> {
         match self {
             DeleteQuery::DropTable(drop_table) => drop_table.execute(db),
             DeleteQuery::DeleteRows(delete_rows) => delete_rows.execute(db),
@@ -48,9 +48,9 @@ impl DropTable {
     pub fn new(table: String) -> Self {
         Self { table }
     }
-    pub fn execute(&self, db: &Database) -> Result<(), DeleteError> {
+    pub fn execute(self, db: &Database) -> Result<(), DeleteError> {
         if db.delete_table(&self.table).is_none() {
-            return Err(DeleteError::UnknownTable(self.table.clone()));
+            return Err(DeleteError::UnknownTable(self.table));
         }
         Ok(())
     }
@@ -64,11 +64,11 @@ impl DeleteRows {
     pub fn new(table: String, expr: Expr) -> Self {
         Self { table, expr }
     }
-    pub fn execute(&self, db: &Database) -> Result<(), DeleteError> {
+    pub fn execute(self, db: &Database) -> Result<(), DeleteError> {
         let table = if let Some(table) = db.get_table(&self.table) {
             table
         } else {
-            return Err(DeleteError::UnknownTable(self.table.clone()));
+            return Err(DeleteError::UnknownTable(self.table));
         };
         let mut rows = Vec::new();
         for (i, row) in table.rows().iter().enumerate() {
@@ -103,11 +103,11 @@ impl TruncateTable {
         Self { table }
     }
 
-    pub fn execute(&self, db: &Database) -> Result<(), DeleteError> {
+    pub fn execute(self, db: &Database) -> Result<(), DeleteError> {
         let table = if let Some(table) = db.get_table(&self.table) {
             table
         } else {
-            return Err(DeleteError::UnknownTable(self.table.clone()));
+            return Err(DeleteError::UnknownTable(self.table));
         };
         table.rows_mut().clear();
         table.counter().store(0, Ordering::SeqCst);
