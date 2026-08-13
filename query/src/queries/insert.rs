@@ -41,7 +41,7 @@ mod test {
         db::Database,
         row::Row,
         scalar,
-        schema::{FieldModifier, FieldType, Schema},
+        schema::{FieldModifier, FieldType},
         table::TableInsertError,
     };
     use structures::VecMap;
@@ -73,9 +73,8 @@ mod test {
         let mut db = Database::new();
 
         let field_types = VecMap::new();
-        let schema = Schema::new(field_types);
         // Creating table with empty type
-        let create_table = CreateTable::new("table".to_string(), schema, false);
+        let create_table = CreateTable::new("table".to_string(), field_types, false);
         create_table.execute(&mut db).unwrap();
 
         let insert = InsertQuery::new(
@@ -100,11 +99,10 @@ mod test {
             "id".to_string(),
             FieldType::new(ScalarType::Int, vec![FieldModifier::Unique]),
         );
-        let schema = Schema::new(field_types);
         let mut db = Database::new();
 
         // Creating table with empty type
-        let create_table = CreateTable::new("table".to_string(), schema, false);
+        let create_table = CreateTable::new("table".to_string(), field_types, false);
         create_table.execute(&mut db).unwrap();
 
         let insert = InsertQuery::new(
@@ -128,10 +126,9 @@ mod test {
         let mut field_types = VecMap::new();
         field_types.insert("age".to_string(), FieldType::new(ScalarType::Int, vec![]));
         field_types.insert("name".to_string(), FieldType::new(ScalarType::Text, vec![]));
-        let schema = Schema::new(field_types);
 
         let mut db = Database::new();
-        let create_table = CreateTable::new("table".to_string(), schema, false);
+        let create_table = CreateTable::new("table".to_string(), field_types, false);
         create_table.execute(&mut db).unwrap();
 
         let insert = InsertQuery::new(

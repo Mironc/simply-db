@@ -87,7 +87,8 @@ fn field_references() {
     let expected = scalar!(Int(1));
     let fields = vec![scalar!(Int(1))];
     let schema =
-        Schema::new(vec![("id".to_owned(), FieldType::new(ScalarType::Int, vec![]))].into());
+        Schema::new(vec![("id".to_owned(), FieldType::new(ScalarType::Int, vec![]))].into())
+            .unwrap();
     let context = Context::new(&fields, &schema);
     assert_eq!(expr.unwrap().execute(&context).unwrap().deref(), &expected);
 }
@@ -221,6 +222,7 @@ fn syntax_errors() {
             given: "5",
         }
     );
+    // TODO: test case for  "parse!("field +").unwrap_err()"
 }
 #[test]
 fn test_bench_func() {

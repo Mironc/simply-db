@@ -1,22 +1,34 @@
-use storage::{db::Database, schema::Schema, table::Table};
+use storage::{
+    db::Database,
+    schema::{FieldType, Schema, SchemaError},
+    table::Table,
+};
+use structures::VecMap;
 
 #[cfg_attr(feature = "serialize", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone)]
 pub enum CreateTableError {
     AlreadyExists,
+    SchemaError(SchemaError),
+}
+
+impl From<SchemaError> for CreateTableError {
+    fn from(v: SchemaError) -> Self {
+        Self::SchemaError(v)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct CreateTable {
     name: String,
-    schema: Schema,
+    fields: VecMap<String, FieldType>,
     if_not_exists: bool,
 }
 impl CreateTable {
-    pub fn new(name: String, schema: Schema, if_not_exists: bool) -> Self {
+    pub fn new(name: String, fields: VecMap<String, FieldType>, if_not_exists: bool) -> Self {
         Self {
             name,
-            schema,
+            fields,
             if_not_exists,
         }
     }
@@ -28,18 +40,15 @@ impl CreateTable {
             }
             return Err(CreateTableError::AlreadyExists);
         }
-        let table = Table::new(self.schema.clone());
+        let schema = Schema::new(self.fields.clone())?;
+        let table = Table::new(schema);
         db.insert_table(self.name.clone(), table).unwrap();
         Ok(())
     }
 }
 #[cfg(test)]
 mod test {
-    use storage::{
-        common_types::ScalarType,
-        db::Database,
-        schema::{FieldType, Schema},
-    };
+    use storage::{common_types::ScalarType, db::Database, schema::FieldType};
     use structures::VecMap;
 
     use crate::queries::create_table::CreateTable;
@@ -49,9 +58,8 @@ mod test {
         let mut fields = VecMap::new();
         fields.insert("age".to_string(), FieldType::new(ScalarType::Int, vec![]));
         fields.insert("name".to_string(), FieldType::new(ScalarType::Text, vec![]));
-        let row_type = Schema::new(fields);
         let mut db = Database::new();
-        let create_table = CreateTable::new("table1".to_string(), row_type, false);
+        let create_table = CreateTable::new("table1".to_string(), fields, false);
         assert!(create_table.execute(&mut db).is_ok());
     }
 
@@ -60,15 +68,14 @@ mod test {
         let mut fields = VecMap::new();
         fields.insert("age".to_string(), FieldType::new(ScalarType::Int, vec![]));
         fields.insert("name".to_string(), FieldType::new(ScalarType::Text, vec![]));
-        let row_type = Schema::new(fields);
         let mut db = Database::new();
-        let create_table = CreateTable::new("table1".to_string(), row_type.clone(), false);
+        let create_table = CreateTable::new("table1".to_string(), fields.clone(), false);
         assert!(create_table.execute(&mut db).is_ok());
 
-        let create_table = CreateTable::new("table1".to_string(), row_type.clone(), false);
+        let create_table = CreateTable::new("table1".to_string(), fields.clone(), false);
         assert!(create_table.execute(&mut db).is_err());
 
-        let create_table = CreateTable::new("table1".to_string(), row_type, true);
+        let create_table = CreateTable::new("table1".to_string(), fields, true);
         assert!(create_table.execute(&mut db).is_ok());
     }
 }

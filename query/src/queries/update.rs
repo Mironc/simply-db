@@ -169,7 +169,7 @@ mod test {
         db::Database,
         row::Row,
         scalar,
-        schema::{FieldModifier, FieldType, Schema},
+        schema::{FieldModifier, FieldType},
     };
     use structures::VecMap;
 
@@ -198,9 +198,8 @@ mod test {
             "email".to_string(),
             FieldType::new(ScalarType::Text, vec![]),
         );
-        let schema = Schema::new(field_types);
 
-        let create_table = CreateTable::new("table".to_string(), schema, false);
+        let create_table = CreateTable::new("table".to_string(), field_types, false);
         create_table.execute(&mut db).unwrap();
 
         let row = Row::new(vec![

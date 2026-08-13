@@ -38,7 +38,7 @@ fn setup_database() -> Database {
         "is_active".to_string(),
         FieldType::new(ScalarType::Bool, vec![]),
     );
-    let schema = Schema::new(field_types);
+    let schema = Schema::new(field_types).unwrap();
     // Create table
     let table = Table::new(schema);
 

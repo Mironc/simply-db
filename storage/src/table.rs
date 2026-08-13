@@ -1,13 +1,21 @@
-use crate::{common_types::DataValue, row::Row, schema::Schema};
+use crate::{
+    common_types::{DataValue, ScalarValue},
+    row::Row,
+    schema::Schema,
+};
 use std::{
     collections::HashSet,
-    sync::{RwLock, RwLockReadGuard, RwLockWriteGuard},
+    sync::{
+        RwLock, RwLockReadGuard, RwLockWriteGuard,
+        atomic::{AtomicU64, Ordering},
+    },
 };
 
 #[derive(Debug)]
 pub struct Table {
     rows: RwLock<Vec<Row>>,
     schema: Schema,
+    counter: AtomicU64,
 }
 
 impl Table {
@@ -15,6 +23,7 @@ impl Table {
         Self {
             rows: RwLock::new(Vec::new()),
             schema,
+            counter: AtomicU64::new(0),
         }
     }
     /// Inserts single row. Returns nothing on success.
@@ -35,6 +44,10 @@ impl Table {
             &[],
             &mut row,
         )?;
+        if let Some(ai_idx) = self.schema.autoincrement_field() {
+            let next_id = self.counter.fetch_add(1, Ordering::SeqCst);
+            row.data_mut()[ai_idx] = DataValue::Scalar(ScalarValue::Int(next_id as i32));
+        }
         self.rows_mut().push(row);
         Ok(())
     }
@@ -47,7 +60,7 @@ impl Table {
     pub fn insert_rows(
         &self,
         field_names: &[String],
-        mut rows: Vec<Row>,
+        rows: Vec<Row>,
     ) -> Result<(), TableInsertError> {
         let mut validated_rows = Vec::with_capacity(rows.len());
         let index_map = if let Some(index_map) = self.schema.build_index_map(field_names) {
@@ -56,12 +69,25 @@ impl Table {
             return Err(TableInsertError::SchemaMismatch);
         };
         let mut temp_buffer = Vec::with_capacity(self.schema.fields().len());
-        for row in rows.iter_mut() {
-            self.validate_row(&index_map, &mut temp_buffer, &validated_rows, row)?;
-            validated_rows.push(row.clone());
+        for mut row in rows.into_iter() {
+            self.validate_row(&index_map, &mut temp_buffer, &validated_rows, &mut row)?;
+            validated_rows.push(row);
         }
-        for row in validated_rows.into_iter() {
-            self.rows_mut().push(row);
+        if let Some(ai_idx) = self.schema.autoincrement_field() {
+            let batch_size = validated_rows.len() as u64;
+            let start_id = self.counter.fetch_add(batch_size, Ordering::SeqCst);
+
+            let mut table_rows = self.rows_mut();
+            for (i, mut row) in validated_rows.into_iter().enumerate() {
+                let current_id = start_id + i as u64;
+
+                row.data_mut()[ai_idx] = DataValue::Scalar(ScalarValue::Int(current_id as i32));
+                table_rows.push(row);
+            }
+        } else {
+            for row in validated_rows.into_iter() {
+                self.rows_mut().push(row);
+            }
         }
         Ok(())
     }
@@ -85,6 +111,10 @@ impl Table {
             .order_row(index_map, row.data_mut(), temp_buffer);
         let table_rows = self.rows();
         for (id, field) in self.schema.fields().iter().enumerate() {
+            // It already guaranteed to be unique
+            if field.1.auto_increment() {
+                continue;
+            }
             if field.1.is_unique() {
                 for cmp_row in table_rows.iter().chain(other_rows.iter()) {
                     let cmp_value = cmp_row.data().get(id);
@@ -113,12 +143,17 @@ impl Table {
     pub fn schema(&self) -> &Schema {
         &self.schema
     }
+
+    pub fn counter(&self) -> &AtomicU64 {
+        &self.counter
+    }
 }
 impl Clone for Table {
     fn clone(&self) -> Self {
         Self {
             rows: RwLock::new(self.rows().clone()),
             schema: self.schema.clone(),
+            counter: AtomicU64::new(self.counter.load(Ordering::SeqCst)),
         }
     }
 }
@@ -136,6 +171,8 @@ pub enum TableInsertError {
 }
 #[cfg(test)]
 mod tests {
+    use std::ops::Deref;
+
     use crate::{
         self as storage,
         common_types::{DataValue, ScalarType, ScalarValue},
@@ -148,7 +185,7 @@ mod tests {
     #[test]
     fn insert_unique_constraint_error() {
         let field_type = FieldType::new(ScalarType::Int, vec![FieldModifier::Unique]);
-        let schema = Schema::new(VecMap::from([("id".to_owned(), field_type)]));
+        let schema = Schema::new(VecMap::from([("id".to_owned(), field_type)])).unwrap();
         let table = Table::new(schema);
         let value = vec![DataValue::Scalar(ScalarValue::Int(0))];
         table
@@ -161,7 +198,7 @@ mod tests {
     #[test]
     fn insert_multiple_unique_constraint_error() {
         let field_type = FieldType::new(ScalarType::Int, vec![FieldModifier::Unique]);
-        let schema = Schema::new(VecMap::from([("id".to_owned(), field_type)]));
+        let schema = Schema::new(VecMap::from([("id".to_owned(), field_type)])).unwrap();
         let table = Table::new(schema);
         let value = vec![DataValue::Scalar(ScalarValue::Int(0))];
         let value1 = vec![DataValue::Scalar(ScalarValue::Int(0))];
@@ -173,7 +210,7 @@ mod tests {
     #[test]
     fn insert_multiple_unique_single_row_success() {
         let field_type = FieldType::new(ScalarType::Int, vec![FieldModifier::Unique]);
-        let schema = Schema::new(VecMap::from([("id".to_owned(), field_type)]));
+        let schema = Schema::new(VecMap::from([("id".to_owned(), field_type)])).unwrap();
         let table = Table::new(schema);
         let value = vec![DataValue::Scalar(ScalarValue::Int(0))];
         let rows = vec![Row::new(value)];
@@ -184,7 +221,7 @@ mod tests {
     #[test]
     fn insert_multiple_unique_success() {
         let field_type = FieldType::new(ScalarType::Int, vec![FieldModifier::Unique]);
-        let schema = Schema::new(VecMap::from([("id".to_owned(), field_type)]));
+        let schema = Schema::new(VecMap::from([("id".to_owned(), field_type)])).unwrap();
         let table = Table::new(schema);
         let value = DataValue::Scalar(ScalarValue::Int(0));
         let value1 = DataValue::Scalar(ScalarValue::Int(1));
@@ -196,7 +233,7 @@ mod tests {
     #[test]
     fn insert_single_unique_multiple_success() {
         let field_type = FieldType::new(ScalarType::Int, vec![FieldModifier::Unique]);
-        let schema = Schema::new(VecMap::from([("id".to_owned(), field_type)]));
+        let schema = Schema::new(VecMap::from([("id".to_owned(), field_type)])).unwrap();
         let table = Table::new(schema);
         let value = DataValue::Scalar(ScalarValue::Int(0));
         let value1 = DataValue::Scalar(ScalarValue::Int(1));
@@ -210,10 +247,51 @@ mod tests {
     #[test]
     fn insert_field_mismatch_error() {
         let field_type = FieldType::new(ScalarType::Int, vec![FieldModifier::NotNull]);
-        let schema = Schema::new(VecMap::from([("id".to_owned(), field_type)]));
+        let schema = Schema::new(VecMap::from([("id".to_owned(), field_type)])).unwrap();
         let table = Table::new(schema);
         let value = vec![];
         let res = table.insert_row(&vec!["id".to_owned()], Row::new(value));
         assert_eq!(res, Err(TableInsertError::SchemaMismatch))
+    }
+    #[test]
+    fn autoincrementing() {
+        let field_type = FieldType::new(ScalarType::Int, vec![FieldModifier::AutoIncrement]);
+        let schema = Schema::new(VecMap::from([("id".to_owned(), field_type)])).unwrap();
+        let table = Table::new(schema);
+
+        table.insert_row(&[], Row::new(vec![])).unwrap();
+        table.insert_row(&[], Row::new(vec![])).unwrap();
+        table.insert_row(&[], Row::new(vec![])).unwrap();
+
+        assert_eq!(
+            table.rows().deref(),
+            &vec![
+                Row::new(vec![DataValue::Scalar(ScalarValue::Int(0))]),
+                Row::new(vec![DataValue::Scalar(ScalarValue::Int(1))]),
+                Row::new(vec![DataValue::Scalar(ScalarValue::Int(2))]),
+            ]
+        )
+    }
+
+    #[test]
+    fn autoincrementing_batch() {
+        let field_type = FieldType::new(ScalarType::Int, vec![FieldModifier::AutoIncrement]);
+        let schema = Schema::new(VecMap::from([("id".to_owned(), field_type)])).unwrap();
+        let table = Table::new(schema);
+        table
+            .insert_rows(
+                &[],
+                vec![Row::new(vec![]), Row::new(vec![]), Row::new(vec![])],
+            )
+            .unwrap();
+
+        assert_eq!(
+            table.rows().deref(),
+            &vec![
+                Row::new(vec![DataValue::Scalar(ScalarValue::Int(0))]),
+                Row::new(vec![DataValue::Scalar(ScalarValue::Int(1))]),
+                Row::new(vec![DataValue::Scalar(ScalarValue::Int(2))]),
+            ]
+        )
     }
 }

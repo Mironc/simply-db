@@ -1,4 +1,4 @@
-use std::ops::Deref;
+use std::{ops::Deref, sync::atomic::Ordering};
 
 use storage::{
     common_types::{DataValue, ScalarValue},
@@ -110,18 +110,21 @@ impl TruncateTable {
             return Err(DeleteError::UnknownTable(self.table.clone()));
         };
         table.rows_mut().clear();
+        table.counter().store(0, Ordering::SeqCst);
         Ok(())
     }
 }
 #[cfg(test)]
 mod tests {
 
+    use std::sync::atomic::Ordering;
+
     use storage::{
         common_types::ScalarType,
         db::Database,
         row::Row,
         scalar,
-        schema::{FieldType, Schema},
+        schema::{FieldModifier, FieldType, Schema},
         table::Table,
     };
     use structures::VecMap;
@@ -131,7 +134,7 @@ mod tests {
         queries::delete::{DeleteError, DeleteRows, DropTable, TruncateTable},
     };
 
-    pub fn init_db() -> Database {
+    fn init_db() -> Database {
         let db = Database::new();
         // Create first row
         let mut data = Vec::new();
@@ -148,13 +151,17 @@ mod tests {
         let row2 = Row::new(data);
 
         let mut field_types = VecMap::new();
+        field_types.insert(
+            "id".to_string(),
+            FieldType::new(ScalarType::Int, vec![FieldModifier::AutoIncrement]),
+        );
         field_types.insert("age".to_string(), FieldType::new(ScalarType::Int, vec![]));
         field_types.insert("name".to_string(), FieldType::new(ScalarType::Text, vec![]));
         field_types.insert(
             "is_active".to_string(),
             FieldType::new(ScalarType::Bool, vec![]),
         );
-        let schema = Schema::new(field_types);
+        let schema = Schema::new(field_types).unwrap();
         // Create table
         let table = Table::new(schema);
 
@@ -176,6 +183,7 @@ mod tests {
 
         db
     }
+
     #[test]
     fn delete_success() {
         let db = init_db();
@@ -191,6 +199,7 @@ mod tests {
             "Row didn't get deleted"
         );
     }
+
     #[test]
     fn delete_bad_expr() {
         let db = init_db();
@@ -198,6 +207,7 @@ mod tests {
         let delete = DeleteRows::new("test_table".to_owned(), expr);
         assert_eq!(delete.execute(&db), Err(DeleteError::BadExpr));
     }
+
     #[test]
     fn delete_unknown_table() {
         let db = init_db();
@@ -211,6 +221,7 @@ mod tests {
             Err(DeleteError::UnknownTable("unknown_table".to_owned()))
         );
     }
+
     #[test]
     fn truncate_success() {
         let db = init_db();
@@ -222,6 +233,7 @@ mod tests {
             "Rows didn't get deleted"
         );
     }
+
     #[test]
     fn truncate_unknown_table() {
         let db = init_db();
@@ -233,12 +245,34 @@ mod tests {
     }
 
     #[test]
+    fn truncate_counter_reset() {
+        let db = init_db();
+        assert_eq!(
+            db.get_table("test_table")
+                .unwrap()
+                .counter()
+                .load(Ordering::Relaxed),
+            2
+        );
+        let trunc = TruncateTable::new("test_table".to_owned());
+        trunc.execute(&db).unwrap();
+        assert_eq!(
+            db.get_table("test_table")
+                .unwrap()
+                .counter()
+                .load(Ordering::Relaxed),
+            0
+        );
+    }
+
+    #[test]
     fn drop_success() {
         let db = init_db();
         let drop = DropTable::new("test_table".to_owned());
         drop.execute(&db).unwrap();
         assert!(!db.has_table("test_table"));
     }
+
     #[test]
     fn drop_unknown_table() {
         let db = init_db();

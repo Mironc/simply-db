@@ -59,7 +59,8 @@ pub fn init_db() -> Database {
             ("email".to_owned(), field_email),
         ]
         .into(),
-    );
+    )
+    .unwrap();
     let table = Table::new(schema);
     db.insert_table("users".to_owned(), table).unwrap();
     db
@@ -80,7 +81,8 @@ pub fn init_db_unique() -> Database {
             ("email".to_owned(), field_email),
         ]
         .into(),
-    );
+    )
+    .unwrap();
     let table = Table::new(schema);
     db.insert_table("users".to_owned(), table).unwrap();
     db

@@ -1,7 +1,7 @@
 use query::{Query, queries::create_table::CreateTable};
 use storage::{
     common_types::ScalarType,
-    schema::{FieldModifier, FieldType, Schema},
+    schema::{FieldModifier, FieldType},
 };
 use structures::VecMap;
 
@@ -19,16 +19,16 @@ fn create_table_success() {
     let walker = Parser::new(lexer).unwrap();
     let query = parse_create_query(walker);
 
-    let mut row_type = VecMap::new();
-    row_type.insert(
+    let mut fields = VecMap::new();
+    fields.insert(
         "id".to_owned(),
         FieldType::new(ScalarType::Int, vec![FieldModifier::PrimaryKey]),
     );
-    row_type.insert(
+    fields.insert(
         "name".to_owned(),
         FieldType::new(ScalarType::Text, vec![FieldModifier::NotNull]),
     );
-    let cmp_query = CreateTable::new("users".to_owned(), Schema::new(row_type), true);
+    let cmp_query = CreateTable::new("users".to_owned(), fields, true);
 
     assert_eq!(query, Ok(Query::CreateTable(cmp_query)))
 }
@@ -39,13 +39,13 @@ fn create_table_no_modifiers() {
     let walker = Parser::new(lexer).unwrap();
     let query = parse_create_query(walker);
 
-    let mut row_type = VecMap::new();
-    row_type.insert("id".to_owned(), FieldType::new(ScalarType::Int, Vec::new()));
-    row_type.insert(
+    let mut fields = VecMap::new();
+    fields.insert("id".to_owned(), FieldType::new(ScalarType::Int, Vec::new()));
+    fields.insert(
         "name".to_owned(),
         FieldType::new(ScalarType::Text, Vec::new()),
     );
-    let cmp_query = CreateTable::new("users".to_owned(), Schema::new(row_type), true);
+    let cmp_query = CreateTable::new("users".to_owned(), fields, true);
 
     assert_eq!(query, Ok(Query::CreateTable(cmp_query)))
 }

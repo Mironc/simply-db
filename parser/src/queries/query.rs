@@ -11,7 +11,7 @@ use query::{
 use storage::{
     common_types::{DataValue, ScalarType},
     row::Row,
-    schema::{FieldModifier, FieldType, Schema},
+    schema::{FieldModifier, FieldType},
 };
 use structures::VecMap;
 
@@ -228,7 +228,9 @@ pub(super) fn parse_create_query<'a>(mut parser: Parser<'a>) -> ParseResult<'a, 
     let create_table_query = CreateTable::new(table_name, row_type, if_not_exists);
     Ok(Query::CreateTable(create_table_query))
 }
-pub(super) fn parse_create_fields<'a>(parser: &mut Parser<'a>) -> ParseResult<'a, Schema> {
+pub(super) fn parse_create_fields<'a>(
+    parser: &mut Parser<'a>,
+) -> ParseResult<'a, VecMap<String, FieldType>> {
     let token = parser.consume()?;
     if token != TokenValue::Delimiter(Delimiter::RoundOpen) {
         return Err(ParseError::UnexpectedSymbol {
@@ -254,7 +256,7 @@ pub(super) fn parse_create_fields<'a>(parser: &mut Parser<'a>) -> ParseResult<'a
         }
     }
 
-    Ok(Schema::new(fields))
+    Ok(fields)
 }
 pub(super) fn parse_field_and_modifiers<'a>(
     walker: &mut Parser<'a>,
