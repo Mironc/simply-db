@@ -1,5 +1,6 @@
 use net::objects::ParseErrorDTO;
 use net::{objects::*, requests::*};
+use simply_db::DatabaseContext;
 use stats_alloc::StatsAlloc;
 use std::alloc::System;
 use std::collections::HashMap;
@@ -17,8 +18,10 @@ use storage::db::Database;
 use tokio::net::TcpListener;
 
 use crate::command_args::CommandArgs;
+use crate::metrics::ServerMetrics;
 
 mod command_args;
+mod metrics;
 
 fn init_logger() {
     use env_logger::fmt::style::AnsiColor;
@@ -53,11 +56,13 @@ fn init_logger() {
 }
 #[derive(Debug, Clone)]
 pub struct DBState {
-    db: Arc<Database>,
+    db_context: Arc<DatabaseContext<ServerMetrics>>,
 }
 impl DBState {
     pub fn new(db: Database) -> Self {
-        Self { db: Arc::new(db) }
+        Self {
+            db_context: Arc::new(DatabaseContext::new_with_metrics(db, ServerMetrics::new())),
+        }
     }
 }
 async fn listen_ip() -> SocketAddr {
@@ -103,28 +108,13 @@ pub async fn query(
     State(state): State<DBState>,
     Json(query): Json<SqlQueryRequest>,
 ) -> Result<Json<SqlQueryOutput>, ParseErrorDTO> {
-    log::info!("Got query {}", query.sql());
-    let instant = std::time::Instant::now();
-    let owned = query.sql().trim_matches('\"').to_string();
-    let query_req = parser::parse_query_request(&owned)?;
-    log::info!(
-        "Took {} s to parse query \"{}\"",
-        instant.elapsed().as_secs_f32(),
-        owned
-    );
-    let instant = std::time::Instant::now();
-    let res = query_req.execute(&state.db);
-    log::info!(
-        "Took {} s to execute query \"{}\"",
-        instant.elapsed().as_secs_f32(),
-        owned
-    );
+    let res = state.db_context.execute(query.sql())?;
     Ok(Json(SqlQueryOutput::new(res)))
 }
 pub async fn overview(State(state): State<DBState>) -> Json<Overview> {
     log::info!("overview request");
     let mut overview_data = HashMap::new();
-    for s in state.db.tables().iter() {
+    for s in state.db_context.database().tables().iter() {
         overview_data.insert(s.0.clone(), s.1.schema().clone());
     }
     let res = Overview::new(overview_data);
