@@ -100,7 +100,12 @@ pub async fn main() -> std::io::Result<()> {
         .route("/v1/overview", get(overview))
         .with_state(DBState::new(db));
     let listener = TcpListener::bind(ip).await?;
-    axum::serve(listener, router).await?;
+    axum::serve(listener, router)
+        .with_graceful_shutdown(async {
+            tokio::signal::ctrl_c().await.unwrap();
+            log::info!("shutdown signal received");
+        })
+        .await?;
     Ok(())
 }
 #[axum::debug_handler]
