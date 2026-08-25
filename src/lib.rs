@@ -1,3 +1,5 @@
+#[cfg(feature = "net")]
+pub extern crate net;
 pub extern crate parser;
 pub extern crate query;
 pub extern crate storage;

@@ -1,4 +1,4 @@
-use net::{
+use simply_db::net::{
     objects::{Health, Overview, ParseErrorDTO, SqlQueryOutput},
     requests::SqlQueryRequest,
 };

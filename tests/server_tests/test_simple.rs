@@ -1,11 +1,7 @@
 #[cfg(test)]
 mod tests {
-    use net::objects::DatabaseState;
-    use storage::{
-        common_types::ScalarType,
-        scalar,
-        schema::{FieldType, Schema},
-    };
+    use simply_db::net::objects::DatabaseState;
+    use storage::{common_types::ScalarType, scalar, schema::FieldType};
 
     use crate::server_tests::server_init::ServerInstance;
 

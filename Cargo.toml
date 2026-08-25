@@ -42,11 +42,11 @@ dotenv = { version = "0.15.0", optional = true }
 env_logger = { version = "0.11", default-features = false, features = ["auto-color", "color"], optional = true }
 iced = { version = "0.14.0", features = ["advanced"], optional = true }
 log = "0.4"
-net = { path = "net/" }
+net = { path = "net/", optional = true }
 parser = { path = "parser/" }
 query = { path = "query/" }
 reqwest = { version = "0.11", features = ["json"], optional = true }
-serde = { workspace = true }
+serde = { workspace = true, optional = true }
 serde_json = { version = "1.0.115", default-features = false, features = ["alloc"], optional = true }
 stats_alloc = { version = "0.1.10", optional = true }
 storage = { path = "storage/" }
@@ -58,13 +58,15 @@ csv = { workspace = true }
 proptest = { version = "*" }
 # We need those for integration tests
 reqwest = { version = "0.11", features = ["json"] }
+serde = { workspace = true }
 tokio = { version = "1.0", features = ["macros", "rt-multi-thread"] }
 
 [features]
 # default = ["client-deps", "server-deps"]
-client-deps = ["env_logger", "iced", "reqwest", "serialize", "tokio"]
-serialize = ["query/serialize", "serde_json", "storage/serialize"]
-server-deps = ["axum", "chrono", "clap", "dotenv", "env_logger", "net/server", "serialize", "stats_alloc", "tokio"]
+client-deps = ["env_logger", "iced", "network", "reqwest", "tokio"]
+network = ["net", "serialize"]
+serialize = ["query/serialize", "serde", "serde_json", "storage/serialize"]
+server-deps = ["axum", "chrono", "clap", "dotenv", "env_logger", "net/server", "network", "stats_alloc", "tokio"]
 
 [profile.release]
 opt-level = 3
