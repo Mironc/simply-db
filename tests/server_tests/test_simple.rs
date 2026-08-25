@@ -1,10 +1,9 @@
-mod server_init;
 #[cfg(test)]
 mod tests {
     use net::objects::DatabaseState;
     use storage::scalar;
 
-    use crate::server_init::ServerInstance;
+    use crate::server_tests::server_init::ServerInstance;
 
     #[tokio::test]
     async fn test_setup() {
