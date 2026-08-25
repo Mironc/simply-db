@@ -27,4 +27,4 @@ jobs:
           cargo build --bin client --features="client-deps"
 
       - name: Run tests
-        run: cargo test --workspace --all-targets --features="server-deps,client-deps"
+        run: cargo test --workspace --all-targets --all-features
