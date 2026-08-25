@@ -1,7 +1,11 @@
 #[cfg(test)]
 mod tests {
     use net::objects::DatabaseState;
-    use storage::scalar;
+    use storage::{
+        common_types::ScalarType,
+        scalar,
+        schema::{FieldType, Schema},
+    };
 
     use crate::server_tests::server_init::ServerInstance;
 
@@ -27,6 +31,17 @@ mod tests {
             .send_query("INSERT INTO users (id, name) VALUES (0, 'Steve'), (1,'Alice')")
             .await
             .unwrap();
+
+        let overview = instance.send_overview().await;
+        let fields = overview.schemas().get("users").unwrap().fields();
+        assert_eq!(
+            fields.get("id").unwrap(),
+            &FieldType::new(ScalarType::Int, vec![])
+        );
+        assert_eq!(
+            fields.get("name").unwrap(),
+            &FieldType::new(ScalarType::Text, vec![])
+        );
 
         let output = instance.send_query("SELECT * FROM users").await.unwrap();
         match output.output()[0].as_ref().unwrap() {

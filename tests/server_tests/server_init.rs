@@ -47,9 +47,9 @@ impl ServerInstance {
             .expect("Error while parsing output")
     }
 
-    pub async fn send_overview(url: &str) -> Overview {
+    pub async fn send_overview(&self) -> Overview {
         let res = reqwest::Client::new()
-            .get(format!("http://{}/v1/overview", url))
+            .get(format!("http://{}/v1/overview", self.listen_ip()))
             .send()
             .await
             .expect("Error while sending request");
