@@ -12,6 +12,7 @@ use crate::{
 use connect_content::*;
 use overview_content::*;
 
+// Used to contain content of panel
 #[derive(Debug, Clone)]
 pub enum SidebarPart {
     Connection(ConnectContent),
@@ -38,24 +39,19 @@ impl SidebarSection {
 }
 #[derive(Debug, Clone)]
 pub struct SidebarSplit {
-    pane: pane_grid::Pane,
-    other_pane: pane_grid::Pane,
+    // Pane that would be folded on click
+    foldable_pane: pane_grid::Pane,
     split: pane_grid::Split,
+    // Keeps ratio between two panes, used to recover ratio after expanding pane
     ratio: f32,
 }
 
 impl SidebarSplit {
-    pub fn new(
-        pane: pane_grid::Pane,
-        other_pane: pane_grid::Pane,
-        split: pane_grid::Split,
-        ratio: f32,
-    ) -> Self {
+    pub fn new(foldable_pane: pane_grid::Pane, split: pane_grid::Split, ratio: f32) -> Self {
         Self {
             split,
             ratio,
-            pane,
-            other_pane,
+            foldable_pane,
         }
     }
 }
@@ -81,12 +77,7 @@ impl SidebarContent {
 
         Self {
             grid,
-            splits: vec![SidebarSplit::new(
-                sidebar_connect,
-                sidebar_overview,
-                sidebar_split,
-                0.5,
-            )],
+            splits: vec![SidebarSplit::new(sidebar_connect, sidebar_split, 0.5)],
         }
     }
     pub fn update(&mut self, message: &Message) -> iced::Task<Message> {
@@ -101,7 +92,7 @@ impl SidebarContent {
                     .iter_mut()
                     .find(|x| x.split == resize_event.split)
                     .unwrap();
-                if let Some(pane) = self.grid.get(split.pane) {
+                if let Some(pane) = self.grid.get(split.foldable_pane) {
                     split.ratio = resize_event.ratio;
                     self.grid.resize(
                         resize_event.split,
@@ -119,7 +110,7 @@ impl SidebarContent {
             Message::ToggleSidebar(pane_id) => {
                 if let Some(pane_state) = self.grid.get_mut(*pane_id) {
                     pane_state.is_expanded = !pane_state.is_expanded;
-                    if let Some(split) = self.splits.iter().find(|x| &x.pane == pane_id) {
+                    if let Some(split) = self.splits.iter().find(|x| &x.foldable_pane == pane_id) {
                         let is_expanded = pane_state.is_expanded;
                         let target_ratio = if is_expanded { split.ratio } else { 0.0 };
                         self.grid.resize(split.split, target_ratio);

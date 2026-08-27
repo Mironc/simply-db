@@ -5,21 +5,21 @@ use query::QueryOutput;
 use storage::common_types::DataValue;
 #[derive(Debug, Clone)]
 pub enum FetchError {
-    ReqwestError(Arc<reqwest::Error>),
-    IOError(Arc<std::io::Error>),
-    ParsingError,
-    QueryError(String),
+    Reqwest(Arc<reqwest::Error>),
+    IO(Arc<std::io::Error>),
+    Parsing,
+    Query(String),
 }
 
 impl From<std::io::Error> for FetchError {
     fn from(v: std::io::Error) -> Self {
-        Self::IOError(Arc::new(v))
+        Self::IO(Arc::new(v))
     }
 }
 
 impl From<reqwest::Error> for FetchError {
     fn from(v: reqwest::Error) -> Self {
-        Self::ReqwestError(Arc::new(v))
+        Self::Reqwest(Arc::new(v))
     }
 }
 
@@ -73,7 +73,7 @@ pub async fn fetch_rows(url: String, table: String) -> Result<Vec<Vec<DataValue>
             r
         } else {
             log::error!("Row fetching query returned not rows");
-            return Err(FetchError::ParsingError);
+            return Err(FetchError::Parsing);
         };
         Ok(result)
     })
@@ -86,7 +86,7 @@ pub async fn ping(url: String) -> Result<(), FetchError> {
         let client = reqwest::Client::new();
         let response = client.get(format!("{}{}", url, "/ping")).send().await?;
         if response.text().await? != "pong" {
-            return Err(FetchError::ParsingError);
+            return Err(FetchError::Parsing);
         }
         Ok(())
     })

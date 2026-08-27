@@ -13,9 +13,6 @@ use crate::{
 #[derive(Debug, Clone, Default)]
 pub struct TableViewer {}
 impl TableViewer {
-    pub fn new() -> Self {
-        Self::default()
-    }
     pub fn update(&mut self, global_data: &GlobalData, message: &Message) -> iced::Task<Message> {
         match message {
             Message::TableChoiceButton(table) => {
