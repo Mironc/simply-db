@@ -119,11 +119,7 @@ impl SidebarContent {
             Message::ToggleSidebar(pane_id) => {
                 if let Some(pane_state) = self.grid.get_mut(*pane_id) {
                     pane_state.is_expanded = !pane_state.is_expanded;
-                    if let Some(split) = self
-                        .splits
-                        .iter()
-                        .find(|x| &x.pane == pane_id || &x.other_pane == pane_id)
-                    {
+                    if let Some(split) = self.splits.iter().find(|x| &x.pane == pane_id) {
                         let is_expanded = pane_state.is_expanded;
                         let target_ratio = if is_expanded { split.ratio } else { 0.0 };
                         self.grid.resize(split.split, target_ratio);
