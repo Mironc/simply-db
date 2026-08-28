@@ -52,7 +52,9 @@ impl TableViewer {
             }
             container(widget::table(columns, rows))
                 .style(|_th| container_interactive_style())
-                .padding(10)
+                .width(Length::Fill)
+                .height(Length::Fill)
+                .padding(7)
                 .into()
         } else {
             widget::space().into()

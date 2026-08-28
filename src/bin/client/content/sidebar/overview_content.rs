@@ -44,7 +44,7 @@ impl OverviewContent {
         .width(Length::Fill)
         .clip(true);
         let content = if is_expanded {
-            let mut content = widget::Column::new();
+            let mut content = widget::Column::new().spacing(4);
             if let Some(overview) = global_data.fetched_overview() {
                 for x in overview.schemas().keys() {
                     content = content.push(
@@ -58,9 +58,9 @@ impl OverviewContent {
             widget::container(content)
         } else {
             widget::container(widget::space())
-        }
-        .padding(7);
-        widget::container(widget::column!(button, content))
+        };
+        widget::container(widget::column!(button, content).spacing(4))
+            .padding(7)
             .width(Length::Fill)
             .height(Length::Fill)
             .clip(true)

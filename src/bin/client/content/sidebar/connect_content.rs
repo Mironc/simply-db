@@ -57,21 +57,25 @@ impl ConnectContent {
                     .on_press(Message::ConnectChoiceButton(url.clone()))
                     .style(|_th, status| button_style(status))
                     .into()
-            }));
-            widget::container(widget::column!(
-                widget::text_input("type db url", &self.input_field)
-                    .on_input(Message::UrlFieldChanged)
-                    .on_submit(Message::UrlSubmit(self.input_field.clone()))
-                    .style(|_th, status| text_input_style(status))
-                    .width(300)
-                    .align_x(Alignment::Center),
-                urls
-            ))
-            .padding(7)
+            }))
+            .spacing(2);
+            widget::container(
+                widget::column!(
+                    widget::text_input("type db url", &self.input_field)
+                        .on_input(Message::UrlFieldChanged)
+                        .on_submit(Message::UrlSubmit(self.input_field.clone()))
+                        .style(|_th, status| text_input_style(status))
+                        .width(300)
+                        .align_x(Alignment::Center),
+                    urls
+                )
+                .spacing(4),
+            )
         } else {
             widget::container(widget::space())
         };
-        widget::container(widget::column!(button, content))
+        widget::container(widget::column!(button, content).spacing(4))
+            .padding(7)
             .width(Length::Fill)
             .clip(true)
             .into()

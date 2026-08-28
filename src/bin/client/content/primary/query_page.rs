@@ -41,6 +41,7 @@ impl QueryPage {
         container(text_input)
             .width(Length::Fill)
             .height(Length::Fill)
+            .padding(7)
             .style(|_th| container_style())
     }
 }
