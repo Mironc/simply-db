@@ -41,16 +41,41 @@ impl TableViewer {
             && let Some(schemas) = global_data.fetched_overview().map(|x| x.schemas())
             && let Some(schema) = schemas.get(table)
         {
-            let mut columns = Vec::new();
-            for (i, field) in schema.fields().iter().enumerate() {
-                columns.push(widget::table::column(
-                    widget::text(&field.0).style(|_th| text_style()),
-                    move |row: &Vec<DataValue>| {
-                        widget::text(row[i].to_string()).wrapping(widget::text::Wrapping::Glyph)
-                    },
-                ));
-            }
-            container(widget::table(columns, rows))
+            let header: widget::Container<'_, _> = container(widget::row(
+                schema
+                    .fields()
+                    .keys()
+                    .map(|field| {
+                        widget::text(field.to_string())
+                            .center()
+                            .width(Length::Fill)
+                            .style(|_th| text_style())
+                            .into()
+                    })
+                    .collect::<Vec<iced::Element<'_, Message>>>(),
+            ))
+            .width(Length::Fill);
+
+            let rows = widget::column(
+                rows.iter()
+                    .map(|row| {
+                        widget::row(
+                            row.iter()
+                                .map(|value| {
+                                    widget::text(value.to_string())
+                                        .center()
+                                        .width(Length::Fill)
+                                        .style(|_th| text_style())
+                                        .into()
+                                })
+                                .collect::<Vec<iced::Element<'_, Message>>>(),
+                        )
+                        .into()
+                    })
+                    .collect::<Vec<iced::Element<'_, Message>>>(),
+            );
+            let scrollable = widget::scrollable(rows).width(Length::Fill);
+            container(widget::column![header, scrollable])
                 .style(|_th| container_interactive_style())
                 .width(Length::Fill)
                 .height(Length::Fill)
