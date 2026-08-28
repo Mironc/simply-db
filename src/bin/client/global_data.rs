@@ -52,8 +52,16 @@ impl GlobalData {
                 },
                 _ => (),
             },
-            Message::ConnectChoiceButton(url) => self.chosen_url = Some(url.clone()),
-            Message::TableChoiceButton(table) => self.chosen_table = Some(table.clone()),
+            Message::ConnectChoiceButton(url) => {
+                self.chosen_table = None;
+                self.fetched_rows = None;
+                self.fetched_overview = None;
+                self.chosen_url = Some(url.clone());
+            }
+            Message::TableChoiceButton(table) => {
+                self.fetched_rows = None;
+                self.chosen_table = Some(table.clone());
+            }
             Message::Update => {
                 let mut task = iced::Task::none();
                 if let Some(url) = &self.chosen_url {
