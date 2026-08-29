@@ -34,14 +34,8 @@ fn insert_fields_empty() {
     let mut walker = Parser::new(lexer).unwrap();
 
     let result = parse_insert_fields(&mut walker);
-    // Expecting failure because the implementation requires at least one field name after '('
-    assert_eq!(
-        result,
-        Err(ParseError::UnexpectedSymbol {
-            expected: "Expected field name".into(),
-            given: ")".into()
-        })
-    )
+    // Now it should pass
+    assert_eq!(result, Ok(vec![]))
 }
 
 #[test]
@@ -59,7 +53,18 @@ fn insert_data_success() {
 }
 
 #[test]
-fn insert_row_count_mismatch() {
+fn insert_data_empty() {
+    let lexer = Lexer::new("()");
+    let mut walker = Parser::new(lexer).unwrap();
+
+    let result = parse_insert_data(&mut walker);
+
+    let data = result.unwrap();
+    assert_eq!(data.len(), 0);
+}
+
+#[test]
+fn insert_query_field_number_mismatch_error() {
     let lexer = Lexer::new(" INSERT  INTO table1  (f1,f2) VALUES  ('text')");
     let walker = Parser::new(lexer).unwrap();
 
@@ -109,5 +114,28 @@ fn insert_query() {
         vec!["int".to_owned(), "string".to_owned()],
         rows,
     );
+    assert_eq!(insert_query, Ok(Query::Insert(cmp_query)));
+}
+
+#[test]
+fn insert_query_with_no_data() {
+    // With one row
+    let lexer = Lexer::new("INSERT INTO table () VALUES ()");
+    let parser = Parser::new(lexer).unwrap();
+    let insert_query = parse_insert_query(parser);
+    let cmp_query = InsertQuery::new("table".to_owned(), vec![], vec![Row::new(vec![])]);
+    assert_eq!(insert_query, Ok(Query::Insert(cmp_query)));
+
+    // With multiple rows
+    let lexer = Lexer::new("INSERT INTO table () VALUES (), (), ()");
+    let walker = Parser::new(lexer).unwrap();
+    let insert_query = parse_insert_query(walker);
+    let mut rows = Vec::new();
+
+    rows.push(Row::new(vec![]));
+    rows.push(Row::new(vec![]));
+    rows.push(Row::new(vec![]));
+
+    let cmp_query = InsertQuery::new("table".to_owned(), vec![], rows);
     assert_eq!(insert_query, Ok(Query::Insert(cmp_query)));
 }

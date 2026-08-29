@@ -367,6 +367,9 @@ pub(super) fn parse_insert_fields<'a>(parser: &mut Parser<'a>) -> ParseResult<'a
     let mut fields = Vec::new();
     loop {
         let token = parser.consume()?;
+        if token == TokenValue::Delimiter(Delimiter::RoundClose) {
+            break;
+        }
         if !token.is_ident() {
             return Err(ParseError::UnexpectedSymbol {
                 expected: "Expected field name",
@@ -403,6 +406,11 @@ pub(super) fn parse_insert_data<'a>(parser: &mut Parser<'a>) -> ParseResult<'a, 
     }
     let mut insert_data = Vec::new();
     loop {
+        let next_token = parser.peek_next();
+        if next_token == TokenValue::Delimiter(Delimiter::RoundClose) {
+            parser.consume()?;
+            break;
+        }
         let data = parse_literal(parser)?;
         insert_data.push(data);
         let token = parser.consume()?;
