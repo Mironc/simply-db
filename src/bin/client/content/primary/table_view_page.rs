@@ -54,6 +54,7 @@ impl TableViewer {
                     })
                     .collect::<Vec<iced::Element<'_, Message>>>(),
             ))
+            .style(|_th| container_style())
             .width(Length::Fill);
 
             let rows = widget::column(
