@@ -5,37 +5,35 @@ use iced::{
 
 use crate::{
     Message,
-    content::style::{MIN_SECTION_SIZE, button_style, text_input_style, text_style},
+    content::style::{
+        MIN_SECTION_SIZE, button_style, container_style, text_input_style, text_style,
+    },
     global_data::GlobalData,
 };
 #[derive(Debug, Clone)]
 pub struct ConnectContent {
     input_field: String,
-    urls: Vec<String>,
 }
 
 impl ConnectContent {
     pub fn new() -> Self {
         Self {
             input_field: String::new(),
-            urls: Vec::new(),
         }
     }
     pub fn update(&mut self, message: &Message) -> iced::Task<Message> {
         match message {
             Message::UrlFieldChanged(field) => self.input_field = field.clone(),
-            Message::UrlSubmit(url) => {
-                self.urls.push(url.to_owned());
+            Message::UrlSubmit(_) => {
                 self.input_field = String::new();
             }
-            Message::ConnectChoiceButton(url) => log::info!("{} db was chosen", url),
             _ => (),
         };
         iced::Task::none()
     }
     pub fn view<'a>(
         &'a self,
-        _global_data: &GlobalData,
+        global_data: &GlobalData,
         is_expanded: bool,
         pane_id: pane_grid::Pane,
     ) -> Element<'a, Message> {
@@ -51,12 +49,55 @@ impl ConnectContent {
         .clip(true);
 
         let content = if is_expanded {
-            let urls = widget::column(self.urls.iter().map(|url| {
-                widget::button(widget::text(url).style(|_th| text_style()))
-                    .padding(5)
-                    .on_press(Message::ConnectChoiceButton(url.clone()))
+            let urls = widget::column(global_data.databases().iter().map(|(url, available)| {
+                let connect_button =
+                    widget::button(widget::text(url.clone()).style(|_th| text_style()))
+                        .padding(5)
+                        .on_press(Message::ConnectChoiceButton(url.clone()))
+                        .style(|_th, status| button_style(status));
+
+                let availability_indicator = widget::container(
+                    widget::text(if *available { "A" } else { "O" })
+                        .color(if *available {
+                            iced::color!(0, 255, 0)
+                        } else {
+                            iced::color!(255, 0, 0)
+                        })
+                        .center(),
+                )
+                .style(|_th| container_style().border(iced::Border::default().width(0)))
+                .padding(10)
+                .width(Length::Shrink)
+                .align_x(Alignment::End);
+
+                let indicator_with_tooltip = widget::tooltip(
+                    availability_indicator,
+                    widget::container(widget::text(if *available {
+                        "Server is available"
+                    } else {
+                        "Server is not available"
+                    })),
+                    widget::tooltip::Position::FollowCursor,
+                );
+
+                let delete_button = widget::container(
+                    widget::button(
+                        widget::text("X").center().color(iced::color!(255, 0, 0)), // RGB RED,
+                    )
                     .style(|_th, status| button_style(status))
-                    .into()
+                    .on_press(Message::RemoveUrl(url.clone())),
+                )
+                .width(Length::Shrink)
+                .align_x(Alignment::End);
+
+                widget::row![
+                    connect_button,
+                    widget::space().width(Length::Fill),
+                    indicator_with_tooltip,
+                    delete_button
+                ]
+                .align_y(Alignment::Center)
+                .into()
             }))
             .spacing(2);
             widget::container(

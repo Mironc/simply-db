@@ -30,7 +30,7 @@ impl SidebarSection {
     pub fn update(&mut self, message: &Message) -> iced::Task<Message> {
         match &mut self.part {
             SidebarPart::Connection(connect_content) => connect_content.update(message),
-            SidebarPart::Overview(overview_content) => overview_content.update(message),
+            SidebarPart::Overview(_) => iced::Task::none(),
         }
     }
     pub fn is_expanded(&self) -> bool {
@@ -67,7 +67,7 @@ impl SidebarContent {
             true,
             SidebarPart::Connection(ConnectContent::new()),
         ));
-        let (sidebar_overview, sidebar_split) = grid
+        let (_, sidebar_split) = grid
             .split(
                 pane_grid::Axis::Horizontal,
                 sidebar_connect,

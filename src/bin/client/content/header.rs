@@ -15,7 +15,6 @@ impl Header {
     pub fn new() -> Self {
         Self {}
     }
-    pub fn update(&mut self) {}
     pub fn view(&self) -> Element<'_, Message> {
         container(
             widget::button(

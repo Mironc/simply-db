@@ -30,10 +30,10 @@ impl ContentPart {
             ContentPart::Primary(_) => "Primary",
         }
     }
-    pub fn update(&mut self, message: &Message, global_data: &GlobalData) -> iced::Task<Message> {
+    pub fn update(&mut self, message: &Message) -> iced::Task<Message> {
         match self {
             ContentPart::Sidebar(sidebar) => sidebar.update(message),
-            ContentPart::Primary(primary) => primary.update(message, global_data),
+            ContentPart::Primary(primary) => primary.update(message),
         }
     }
 }
@@ -57,10 +57,10 @@ impl Content {
         let header = Header::new();
         Self { grid, header }
     }
-    pub fn update(&mut self, message: Message, global_data: &GlobalData) -> iced::Task<Message> {
+    pub fn update(&mut self, message: Message) -> iced::Task<Message> {
         let mut tasks = iced::Task::none();
         for pane in self.grid.iter_mut() {
-            tasks = tasks.chain(pane.1.update(&message, global_data));
+            tasks = tasks.chain(pane.1.update(&message));
         }
         match message {
             Message::MainResize(resize_event) => {

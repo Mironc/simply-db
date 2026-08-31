@@ -32,13 +32,11 @@ impl PrimaryContent {
     pub fn new() -> Self {
         Self::default()
     }
-    pub fn update(&mut self, message: &Message, global_data: &GlobalData) -> iced::Task<Message> {
+    pub fn update(&mut self, message: &Message) -> iced::Task<Message> {
         if let Message::PrimarySwitchPage(primary_page) = message {
             self.page = *primary_page
         }
-        let t1 = self.query_page.update(global_data, message);
-        let t2 = self.table_view.update(global_data, message);
-        t1.chain(t2)
+        self.query_page.update(message)
     }
     pub fn view<'a>(&'a self, global_data: &'a GlobalData) -> iced::widget::Container<'a, Message> {
         let table_view_header =

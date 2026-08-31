@@ -57,13 +57,9 @@ pub fn main() -> iced::Result {
 }
 #[derive(Debug, Clone)]
 pub enum AsyncMessage {
-    Ping,
-    PingResult(Result<(), FetchError>),
-    Overview,
+    PingResult(Vec<Result<(), FetchError>>),
     OverviewResult(Result<Overview, FetchError>),
-    FetchTable,
     FetchTableResult(Result<Vec<Vec<DataValue>>, FetchError>),
-    SendQuery,
     QueryResult(Result<(), FetchError>),
 }
 #[derive(Debug, Clone)]
@@ -78,8 +74,11 @@ pub enum Message {
     ToggleSidebar(pane_grid::Pane),
     UrlSubmit(String),
     AsyncMessage(AsyncMessage),
+    // Checks databases for availability
+    CheckDatabases,
     Update,
     TableChoiceButton(String),
+    RemoveUrl(String),
 }
 #[derive(Debug, Clone)]
 pub struct AppState {
@@ -105,7 +104,7 @@ fn app_boot() -> AppState {
 }
 fn app_update(state: &mut AppState, message: Message) -> iced::Task<Message> {
     let task1 = state.global_data.update(&message);
-    let task2 = state.content.update(message, &state.global_data);
+    let task2 = state.content.update(message);
     task1.chain(task2)
 }
 fn app_view(state: &AppState) -> iced::Element<'_, Message> {

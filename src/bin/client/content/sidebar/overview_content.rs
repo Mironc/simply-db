@@ -4,10 +4,9 @@ use iced::{
 };
 
 use crate::{
-    AsyncMessage, Message,
+    Message,
     content::style::{MIN_SECTION_SIZE, button_style, text_style},
     global_data::GlobalData,
-    requests::{self},
 };
 
 #[derive(Debug, Clone, Default)]
@@ -16,16 +15,6 @@ pub struct OverviewContent {}
 impl OverviewContent {
     pub fn new() -> Self {
         Self::default()
-    }
-    pub fn update(&mut self, message: &Message) -> iced::Task<Message> {
-        match message {
-            Message::ConnectChoiceButton(url) => iced::Task::perform(
-                requests::fetch_overview(url.clone()),
-                AsyncMessage::OverviewResult,
-            )
-            .map(Message::AsyncMessage),
-            _ => iced::Task::none(),
-        }
     }
     pub fn view<'a>(
         &'a self,

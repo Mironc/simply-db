@@ -1,10 +1,12 @@
 use net::objects::Overview;
 use storage::common_types::DataValue;
 
-use crate::{AsyncMessage, Message};
+use crate::{AsyncMessage, Message, requests};
 
 #[derive(Debug, Clone, Default)]
 pub struct GlobalData {
+    // database urls and last ping result
+    databases: Vec<(String, bool)>,
     chosen_url: Option<String>,
     chosen_table: Option<String>,
     fetched_rows: Option<Vec<Vec<DataValue>>>,
@@ -15,7 +17,51 @@ impl GlobalData {
     pub fn new() -> Self {
         Self::default()
     }
+    fn fetch_overview(&self) -> iced::Task<Message> {
+        if let Some(url) = &self.chosen_url {
+            iced::Task::perform(
+                requests::fetch_overview(url.clone()),
+                AsyncMessage::OverviewResult,
+            )
+            .map(Message::AsyncMessage)
+        } else {
+            iced::Task::none()
+        }
+    }
+    fn fetch_ping(&self) -> iced::Task<Message> {
+        let mut futures = Vec::new();
 
+        for (db, _) in self.databases.iter() {
+            futures.push(requests::ping(db.clone()));
+        }
+        iced::Task::perform(
+            iced::futures::future::join_all(futures),
+            AsyncMessage::PingResult,
+        )
+        .map(Message::AsyncMessage)
+    }
+    fn fetch_rows(&self) -> iced::Task<Message> {
+        if let (Some(url), Some(table)) = (&self.chosen_url, &self.chosen_table) {
+            iced::Task::perform(
+                requests::fetch_rows(url.clone(), table.clone()),
+                AsyncMessage::FetchTableResult,
+            )
+            .map(Message::AsyncMessage)
+        } else {
+            iced::Task::none()
+        }
+    }
+    fn fetch_query(&self, query: String) -> iced::Task<Message> {
+        if let Some(url) = &self.chosen_url {
+            iced::Task::perform(
+                requests::send_query(url.clone(), query),
+                AsyncMessage::QueryResult,
+            )
+            .map(Message::AsyncMessage)
+        } else {
+            iced::Task::none()
+        }
+    }
     pub fn chosen_url(&self) -> Option<&String> {
         self.chosen_url.as_ref()
     }
@@ -50,36 +96,49 @@ impl GlobalData {
                     Ok(_) => (),
                     Err(e) => log::error!("while sending query: {:?}", e),
                 },
-                _ => (),
+                AsyncMessage::PingResult(items) => {
+                    for i in 0..self.databases.len() {
+                        self.databases[i].1 = if let Ok(_) = items[i] { true } else { false };
+                    }
+                }
             },
             Message::ConnectChoiceButton(url) => {
                 self.chosen_table = None;
                 self.fetched_rows = None;
                 self.fetched_overview = None;
                 self.chosen_url = Some(url.clone());
+                return self.fetch_overview();
             }
             Message::TableChoiceButton(table) => {
                 self.fetched_rows = None;
                 self.chosen_table = Some(table.clone());
+                return self.fetch_rows();
+            }
+            Message::QuerySubmit(query) => return self.fetch_query(query.clone()),
+            Message::UrlSubmit(url) => {
+                self.databases.push((url.clone(), false));
+            }
+            Message::RemoveUrl(url) => {
+                if let Some(pos) = self.databases.iter().position(|(db_url, _)| db_url == url) {
+                    self.databases.remove(pos);
+                } else {
+                    log::error!("Url {} not found", url)
+                }
             }
             Message::Update => {
-                let mut task = iced::Task::none();
-                if let Some(url) = &self.chosen_url {
-                    let url = url.clone();
-                    let task_1 =
-                        iced::Task::perform(async {}, |()| Message::ConnectChoiceButton(url));
-                    task = task.chain(task_1);
-                };
-                if let Some(table) = &self.chosen_table {
-                    let table = table.clone();
-                    let task_1 =
-                        iced::Task::perform(async {}, |()| Message::TableChoiceButton(table));
-                    task = task.chain(task_1);
-                };
-                return task;
+                let mut tasks = Vec::new();
+                tasks.push(self.fetch_ping());
+                tasks.push(self.fetch_rows());
+                tasks.push(self.fetch_overview());
+
+                return iced::Task::batch(tasks);
             }
             _ => (),
         }
         iced::Task::none()
+    }
+
+    pub fn databases(&self) -> &[(String, bool)] {
+        &self.databases
     }
 }
